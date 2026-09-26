@@ -21,7 +21,9 @@ import {
   LogOut,
   Users,
   Lock,
-  UserPlus
+  UserPlus,
+  Key,
+  Check
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
@@ -133,7 +135,6 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
   const handleQtyChange = (e) => {
     const val = e.target.value;
     setQty(val);
-    // Kalkulasi otomatis saat Qty berubah
     const calc = (parseFloat(val) || 0) * (parseFloat(hargaSatuan) || 0);
     setAmount(calc || '');
   };
@@ -141,7 +142,6 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
   const handleHargaChange = (e) => {
     const val = e.target.value;
     setHargaSatuan(val);
-    // Kalkulasi otomatis saat Harga berubah
     const calc = (parseFloat(qty) || 0) * (parseFloat(val) || 0);
     setAmount(calc || '');
   };
@@ -170,13 +170,12 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
   };
 
   const downloadTemplate = () => {
-    // Menggunakan pemisah Titik Koma (;) agar langsung terpisah kolomnya di MS Excel versi Indonesia
+    // Memisahkan kolom dengan Titik Koma (;) dan menambahkan kolom Saldo
     const headers = "Tanggal;Jenis (in/out);Keterangan;Satuan;Qty;HargaSatuan;Saldo\n";
     const example1 = "2026-09-25;in;Pemasukan Contoh Tukin;Bulan;1;500000;500000\n";
     const example2 = "2026-09-26;out;Pengeluaran Contoh Tukin;Pcs;2;50000;400000\n";
     const note = ";;;;;;PENTING: Jenis harus diisi 'in' (Pemasukan) atau 'out' (Pengeluaran). Format Tanggal YYYY-MM-DD. Kolom Saldo diabaikan saat diimpor karena aplikasi menghitungnya otomatis.\n";
     
-    // Menambahkan BOM (Byte Order Mark) agar karakter dibaca UTF-8 dengan benar oleh Excel
     const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
     const blob = new Blob([bom, headers + example1 + example2 + note], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -200,26 +199,21 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
         return;
       }
 
-      // Deteksi otomatis apakah file Excel menyimpannya dengan koma (,) atau titik koma (;)
       const delimiter = rows[0].includes(';') ? ';' : ',';
       
       const newTxs = [];
       let successCount = 0;
       let errorCount = 0;
 
-      // Mulai dari i=1 untuk melewati header
       for (let i = 1; i < rows.length; i++) {
-        // Pembersihan tanda kutip berlebih dari format bawaan Excel
         const cols = rows[i].split(delimiter).map(c => c.trim().replace(/['"]/g, ''));
         
-        // Abaikan baris catatan PENTING jika user lupa menghapusnya
         if(cols[0] === '' && cols[6]?.includes('PENTING')) continue;
 
         if (cols.length >= 6 && cols[0] !== '') {
           const dateStr = cols[0];
           let typeStr = cols[1].toLowerCase();
           
-          // Sistem bisa membaca jika user menulis "in", "masuk", "out", "keluar"
           if(typeStr.includes('in') || typeStr.includes('masuk') || typeStr.includes('pemasukan')) typeStr = 'in';
           else if(typeStr.includes('out') || typeStr.includes('keluar') || typeStr.includes('pengeluaran')) typeStr = 'out';
           
@@ -237,7 +231,7 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
               satuan: sat,
               qty: q,
               hargaSatuan: hrg,
-              amount: q * hrg // Sistem memverifikasi ulang angka aslinya
+              amount: q * hrg 
             });
             successCount++;
           } else {
@@ -253,8 +247,8 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
         setImportMsg({ text: 'Tidak ada data valid yang bisa diimpor. Pastikan mengikuti format template.', type: 'error' });
       }
       
-      e.target.value = ''; // Reset form input file
-      setTimeout(() => setImportMsg({ text: '', type: '' }), 8000); // Hilangkan pesan setelah 8 detik
+      e.target.value = ''; 
+      setTimeout(() => setImportMsg({ text: '', type: '' }), 8000); 
     };
     reader.readAsText(file);
   };
@@ -481,7 +475,6 @@ const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkA
   };
 
   const rekapData = useMemo(() => {
-    // Urutkan dari yang terlama ke terbaru untuk menghitung saldo berjalan
     const sorted = [...transactions].sort((a, b) => new Date(a.date) - new Date(b.date));
     let currentSaldo = 0;
     return sorted.map(t => {
@@ -504,7 +497,7 @@ const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkA
     const headers = ['Tanggal', 'Keterangan', 'Satuan', 'Qty', 'Harga/Satuan (Rp)', 'Pemasukan (Rp)', 'Pengeluaran (Rp)', 'Saldo (Rp)'];
     const csvRows = filteredRekapData.map(t => [
       t.date,
-      `"${t.description.replace(/"/g, '""')}"`, // Handle quotes in description
+      `"${t.description.replace(/"/g, '""')}"`,
       `"${t.satuan || '-'}"`,
       t.qty || '-',
       t.hargaSatuan || 0,
@@ -530,7 +523,6 @@ const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkA
 
   const exportToPDF = async () => {
     try {
-      // 1. Memuat jsPDF secara dinamis melalui CDN (Workaround untuk environment tanpa NPM)
       if (!window.jspdf) {
         await new Promise((resolve, reject) => {
           const script = document.createElement('script');
@@ -541,7 +533,6 @@ const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkA
         });
       }
       
-      // 2. Memuat jsPDF-AutoTable secara dinamis
       if (!window.jspdf.jsPDF.API.autoTable) {
         await new Promise((resolve, reject) => {
           const script = document.createElement('script');
@@ -552,7 +543,6 @@ const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkA
         });
       }
       
-      // Inisialisasi jsPDF (Orientasi Landscape agar kolom muat dan tidak terlalu sempit)
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({ orientation: 'landscape' });
       const pageWidth = doc.internal.pageSize.getWidth();
@@ -560,19 +550,12 @@ const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkA
       let startYPos = 45;
 
       if (kopImage) {
-        // Jika user mengunggah gambar Kop Surat
-        // Format (gambar, Tipe, PosisiX, PosisiY, Lebar, Tinggi)
-        // Menggunakan 'PNG' dan menambah tinggi dari 28 ke 45 agar proporsional dan tidak gepeng
         doc.addImage(kopImage, 'PNG', 14, 10, pageWidth - 28, 45);
-        
-        // Garis manual DIHAPUS karena gambar kopp.PNG sudah memiliki garis pembatas sendiri
-        
-        startYPos = 65; // Menurunkan posisi judul tabel karena tinggi gambar kop ditambah
+        startYPos = 65; 
       } else {
-        // --- KOP SURAT TEKS (Default jika tidak ada file) ---
         doc.setFont("helvetica", "bold");
         doc.setFontSize(18);
-        doc.setTextColor(15, 23, 42); // Warna teks gelap
+        doc.setTextColor(15, 23, 42); 
         doc.text("PONDOK TAHFIDH YANBU'UL QURA'AN 1 PATI", pageWidth / 2, 16, { align: 'center' });
         
         doc.setFont("helvetica", "normal");
@@ -581,29 +564,25 @@ const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkA
         doc.text("Jl. Raya Margorejo - Pati Km. 5, Kabupaten Pati, Jawa Tengah 59163", pageWidth / 2, 22, { align: 'center' });
         doc.text("Telepon: (0295) 1234567 | Email: info@binainsani-pati.sch.id", pageWidth / 2, 27, { align: 'center' });
         
-        // Garis Ganda Pembatas Kop
         doc.setDrawColor(15, 23, 42);
         doc.setLineWidth(0.8);
-        doc.line(14, 32, pageWidth - 14, 32); // Garis tebal atas
+        doc.line(14, 32, pageWidth - 14, 32); 
         doc.setLineWidth(0.2);
-        doc.line(14, 33.5, pageWidth - 14, 33.5); // Garis tipis bawah
+        doc.line(14, 33.5, pageWidth - 14, 33.5); 
         
         startYPos = 45;
       }
 
-      // --- JUDUL LAPORAN ---
       doc.setFont("helvetica", "bold");
       doc.setFontSize(14);
       doc.setTextColor(15, 23, 42);
       doc.text(`LAPORAN KEUANGAN - ${title.toUpperCase()}`, pageWidth / 2, startYPos, { align: 'center' });
       
-      // Keterangan Tanggal Cetak
       doc.setFont("helvetica", "normal");
       doc.setFontSize(10);
       doc.setTextColor(100, 116, 139);
       doc.text(`Periode Cetak: ${formatDate(new Date().toISOString())}`, pageWidth / 2, startYPos + 6, { align: 'center' });
 
-      // Persiapan Data Tabel
       const tableColumn = ["No.", "Tanggal", "Keterangan", "Satuan", "Qty", "Harga/Sat", "Pemasukan", "Pengeluaran", "Saldo"];
       const tableRows = [];
 
@@ -622,25 +601,22 @@ const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkA
         tableRows.push(rowData);
       });
 
-      // Generate Tabel (Turunkan startY agar tidak menabrak Kop Surat)
       doc.autoTable({
         head: [tableColumn],
         body: tableRows,
         startY: startYPos + 12,
         theme: 'grid',
         styles: { fontSize: 8, cellPadding: 3 },
-        headStyles: { fillColor: [5, 150, 105], textColor: 255 }, // Warna hijau emerald
+        headStyles: { fillColor: [5, 150, 105], textColor: 255 },
         alternateRowStyles: { fillColor: [249, 250, 251] },
         columnStyles: {
-          8: { fontStyle: 'bold' } // Membuat kolom indeks ke-8 (Saldo) menjadi cetak tebal
+          8: { fontStyle: 'bold' } 
         }
       });
 
-      // Eksekusi Unduh File otomatis
       doc.save(`Rekap_${title}_${new Date().toISOString().split('T')[0]}.pdf`);
     } catch (error) {
       console.error("Gagal memuat library PDF", error);
-      // Di aplikasi nyata, kita akan memberikan notifikasi pop-up yang elegan
     }
   };
 
@@ -648,7 +624,6 @@ const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkA
     <div className="space-y-6 print:space-y-4">
       <h2 className="text-2xl font-bold text-gray-800">{title}</h2>
       
-      {/* Sub Menu / Sub Tabs */}
       <div className="flex flex-wrap gap-3 mb-6 border-b border-gray-200 pb-4 print:hidden">
         <button 
           onClick={() => setActiveSubTab('input')}
@@ -670,7 +645,6 @@ const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkA
         </button>
       </div>
 
-      {/* Tampilkan filter khusus untuk sub tab Rekap dan Riwayat */}
       {(activeSubTab === 'rekap' || activeSubTab === 'riwayat') && (
         <DateFilter 
           filterType={filterType} setFilterType={setFilterType}
@@ -679,16 +653,15 @@ const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkA
         />
       )}
 
-      {/* Sub Content */}
-  <div className="animate-in fade-in duration-300">
-    {activeSubTab === 'input' && (
-      <TransactionForm 
-        onAddTransaction={onAddTransaction} 
-        onBulkAddTransactions={onBulkAddTransactions}
-        category={category} 
-      />
-    )}
-    {activeSubTab === 'rekap' && (
+      <div className="animate-in fade-in duration-300">
+        {activeSubTab === 'input' && (
+          <TransactionForm 
+            onAddTransaction={onAddTransaction} 
+            onBulkAddTransactions={onBulkAddTransactions}
+            category={category} 
+          />
+        )}
+        {activeSubTab === 'rekap' && (
           <div className="space-y-4">
             <div className="flex flex-wrap justify-end gap-3 mb-2 print:hidden">
               <label className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer border ${kopImage ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'}`}>
@@ -744,7 +717,6 @@ const Dashboard = ({ transactions, role }) => {
   }, [transactions, filterType, filterMonth, dateRange]);
 
   const stats = useMemo(() => {
-    // 1. Hitung total saldo absolut (tidak terpengaruh filter tanggal)
     let absoluteTotalIn = 0, absoluteTotalOut = 0;
     let absoluteTukinIn = 0, absoluteTukinOut = 0;
     let absoluteKeamananIn = 0, absoluteKeamananOut = 0;
@@ -761,7 +733,6 @@ const Dashboard = ({ transactions, role }) => {
       }
     });
 
-    // 2. Hitung arus kas khusus untuk periode yang difilter
     let periodIn = 0, periodOut = 0;
     filteredTransactions.forEach(t => {
       if (t.type === 'in') periodIn += t.amount;
@@ -813,7 +784,6 @@ const Dashboard = ({ transactions, role }) => {
       />
 
       <div className={`grid grid-cols-1 md:grid-cols-${role === 'admin' ? '3' : '1'} gap-6`}>
-        {/* Card Total Saldo (Tampil untuk Admin, atau menyesuaikan role) */}
         <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden flex flex-col">
           <div className="absolute top-0 right-0 p-4 opacity-20">
             <TrendingUp className="w-24 h-24" />
@@ -845,7 +815,6 @@ const Dashboard = ({ transactions, role }) => {
           </div>
         </div>
 
-        {/* Card Saldo Tukin (Hanya Tampil Jika Admin) */}
         {role === 'admin' && (
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
             <div>
@@ -860,7 +829,6 @@ const Dashboard = ({ transactions, role }) => {
           </div>
         )}
 
-        {/* Card Saldo Keamanan (Hanya Tampil Jika Admin) */}
         {role === 'admin' && (
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
             <div>
@@ -877,7 +845,6 @@ const Dashboard = ({ transactions, role }) => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Grafik Arus Kas */}
         <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-6 animate-in fade-in">
           <h3 className="text-lg font-semibold text-gray-800 mb-6 flex items-center">
             <TrendingUp className="w-5 h-5 mr-2 text-emerald-600"/>
@@ -910,7 +877,6 @@ const Dashboard = ({ transactions, role }) => {
           )}
         </div>
 
-        {/* Total Transaksi Card (Clickable) */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col animate-in fade-in">
             <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
             <Activity className="w-5 h-5 mr-2 text-emerald-600"/>
@@ -932,7 +898,6 @@ const Dashboard = ({ transactions, role }) => {
         </div>
       </div>
 
-      {/* Expanded View for History */}
       {showHistory && (
         <div className="bg-white rounded-xl shadow-md border border-emerald-100 p-6 animate-in slide-in-from-top-4 mt-6 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-2 h-full bg-emerald-500"></div>
@@ -951,7 +916,7 @@ const Dashboard = ({ transactions, role }) => {
             <div className="pl-4">
               <TransactionList 
                 transactions={filteredTransactions.sort((a, b) => new Date(b.date) - new Date(a.date))} 
-                onDelete={() => {}} // Disabled on dashboard
+                onDelete={() => {}} 
               />
             </div>
         </div>
@@ -960,19 +925,22 @@ const Dashboard = ({ transactions, role }) => {
   );
 };
 
-const SettingsView = ({ users, onAddUser, onDeleteUser }) => {
+const SettingsView = ({ users, onAddUser, onDeleteUser, onUpdatePassword }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [role, setRole] = useState('user_tukin');
 
+  // State untuk form ubah password inline
+  const [editingPasswordId, setEditingPasswordId] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!username || !password || !name) return;
     
-    // Cek apakah username sudah ada
     if (users.some(u => u.username === username)) {
-      alert("Username sudah digunakan!"); // Exception permitted for basic mock error handling in settings
+      alert("Username sudah digunakan!"); 
       return;
     }
 
@@ -983,6 +951,17 @@ const SettingsView = ({ users, onAddUser, onDeleteUser }) => {
     setRole('user_tukin');
   };
 
+  const handleSavePassword = (id) => {
+    if (!newPassword.trim()) {
+      alert("Password tidak boleh kosong!");
+      return;
+    }
+    onUpdatePassword(id, newPassword);
+    setEditingPasswordId(null);
+    setNewPassword('');
+    alert("Password berhasil diubah!");
+  };
+
   return (
     <div className="space-y-6">
       <h2 className="text-2xl font-bold text-gray-800 flex items-center">
@@ -991,7 +970,6 @@ const SettingsView = ({ users, onAddUser, onDeleteUser }) => {
       </h2>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Form Tambah User */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center border-b border-gray-100 pb-3">
             <UserPlus className="w-5 h-5 mr-2 text-emerald-600" />
@@ -1008,7 +986,7 @@ const SettingsView = ({ users, onAddUser, onDeleteUser }) => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
+              <input type="text" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Hak Akses (Role)</label>
@@ -1024,7 +1002,6 @@ const SettingsView = ({ users, onAddUser, onDeleteUser }) => {
           </form>
         </div>
 
-        {/* Daftar User */}
         <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
           <div className="p-6 border-b border-gray-100 flex justify-between items-center">
             <h3 className="text-lg font-semibold text-gray-800 flex items-center">
@@ -1056,16 +1033,54 @@ const SettingsView = ({ users, onAddUser, onDeleteUser }) => {
                         {u.role === 'admin' ? 'Administrator' : u.role === 'user_tukin' ? 'Tukin' : 'Keamanan'}
                       </span>
                     </td>
-                    <td className="p-4 text-center">
-                      {u.role !== 'admin' && ( // Mencegah admin menghapus dirinya sendiri/admin lain sementara
-                        <button 
-                          onClick={() => onDeleteUser(u.id)}
-                          className="text-red-400 hover:text-red-600 transition-colors p-2 rounded-md hover:bg-red-50"
-                          title="Hapus Pengguna"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
+                    <td className="p-4">
+                      <div className="flex justify-center items-center gap-2">
+                        {editingPasswordId === u.id ? (
+                          <div className="flex items-center gap-1 animate-in fade-in zoom-in duration-200">
+                            <input 
+                              type="text" 
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                              placeholder="Pass baru..."
+                              className="w-28 p-1.5 text-sm border border-emerald-300 rounded focus:ring-1 focus:ring-emerald-500 outline-none"
+                              autoFocus
+                            />
+                            <button 
+                              onClick={() => handleSavePassword(u.id)}
+                              className="p-1.5 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded transition-colors"
+                              title="Simpan Password"
+                            >
+                              <Check className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => setEditingPasswordId(null)}
+                              className="p-1.5 bg-red-100 text-red-700 hover:bg-red-200 rounded transition-colors"
+                              title="Batal"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <button 
+                              onClick={() => { setEditingPasswordId(u.id); setNewPassword(''); }}
+                              className="text-blue-500 hover:text-blue-700 transition-colors p-2 rounded-md hover:bg-blue-50"
+                              title="Ubah Password"
+                            >
+                              <Key className="w-4 h-4" />
+                            </button>
+                            {u.role !== 'admin' && ( 
+                              <button 
+                                onClick={() => onDeleteUser(u.id)}
+                                className="text-red-400 hover:text-red-600 transition-colors p-2 rounded-md hover:bg-red-50"
+                                title="Hapus Pengguna"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1079,13 +1094,12 @@ const SettingsView = ({ users, onAddUser, onDeleteUser }) => {
 };
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState(null); // null = belum login
+  const [currentUser, setCurrentUser] = useState(null);
   const [users, setUsers] = useState(initialUsers);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [transactions, setTransactions] = useState(initialTransactions);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // State untuk form login
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -1098,7 +1112,7 @@ export default function App() {
       setLoginError('');
       setLoginUsername('');
       setLoginPassword('');
-      setActiveTab('dashboard'); // Reset tab ke dashboard tiap login
+      setActiveTab('dashboard'); 
     } else {
       setLoginError('Username atau password salah.');
     }
@@ -1108,13 +1122,16 @@ export default function App() {
     setCurrentUser(null);
   };
 
-  // Fungsi Kelola User (Khusus Admin)
   const handleAddUser = (newUser) => {
     setUsers(prev => [...prev, { ...newUser, id: Date.now() }]);
   };
 
   const handleDeleteUser = (id) => {
     setUsers(prev => prev.filter(u => u.id !== id));
+  };
+
+  const handleUpdatePassword = (id, newPassword) => {
+    setUsers(prev => prev.map(u => u.id === id ? { ...u, password: newPassword } : u));
   };
 
   const handleAddTransaction = (newTx) => {
@@ -1125,7 +1142,6 @@ export default function App() {
   };
 
   const handleBulkAddTransactions = (newTxs) => {
-    // Memberikan ID unik berdasar indeks karena dimasukkan di detik/milidetik yang sama
     const txsWithIds = newTxs.map((tx, index) => ({
       ...tx,
       id: Date.now() + index
@@ -1134,16 +1150,12 @@ export default function App() {
   };
 
   const handleDeleteTransaction = (id) => {
-    // Note: Alert tidak digunakan sesuai aturan, langsung menghapus untuk prototipe
     setTransactions(transactions.filter(t => t.id !== id));
   };
 
-  // Filter transaksi khusus dashboard berdasarkan role user yang login
   const getDashboardTransactions = () => {
     if (currentUser?.role === 'admin') return transactions;
-    // Jika role user_tukin, hanya kirim data tukin
     if (currentUser?.role === 'user_tukin') return transactions.filter(t => t.category === 'tukin');
-    // Jika role user_keamanan, hanya kirim data keamanan
     if (currentUser?.role === 'user_keamanan') return transactions.filter(t => t.category === 'keamanan');
     return [];
   };
@@ -1180,6 +1192,7 @@ export default function App() {
             users={users} 
             onAddUser={handleAddUser} 
             onDeleteUser={handleDeleteUser} 
+            onUpdatePassword={handleUpdatePassword}
           />
         );
       default:
@@ -1187,7 +1200,6 @@ export default function App() {
     }
   };
 
-  // Tampilan Halaman Login jika belum ada yang masuk
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
@@ -1235,19 +1247,11 @@ export default function App() {
               Masuk
             </button>
           </form>
-          
-          <div className="mt-8 pt-6 border-t border-gray-100 text-center text-xs text-gray-400">
-            <p><strong>Akun Demo:</strong></p>
-            <p>Admin: <code className="bg-gray-100 px-1 rounded text-gray-600">admin</code> (Akses Penuh)</p>
-            <p>Tukin: <code className="bg-gray-100 px-1 rounded text-gray-600">tukin</code> | Keamanan: <code className="bg-gray-100 px-1 rounded text-gray-600">keamanan</code></p>
-            <p>Password semuanya: <code className="bg-gray-100 px-1 rounded text-gray-600">123</code></p>
-          </div>
         </div>
       </div>
     );
   }
 
-  // Filter Menu Navigasi berdasarkan Role
   const allNavItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'user_tukin', 'user_keamanan'] },
     { id: 'tukin', label: 'Kas Tukin', icon: Wallet, roles: ['admin', 'user_tukin'] },
@@ -1259,7 +1263,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans print:bg-white">
-      {/* Mobile Header */}
       <div className="md:hidden bg-emerald-800 text-white p-4 flex justify-between items-center shadow-md z-20 print:hidden">
         <h1 className="font-bold text-lg truncate">SIM Bendahara</h1>
         <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
@@ -1267,7 +1270,6 @@ export default function App() {
         </button>
       </div>
 
-      {/* Sidebar */}
       <div className={`
         ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} 
         md:translate-x-0 
@@ -1279,7 +1281,6 @@ export default function App() {
           <p className="text-emerald-300 text-sm mt-1 truncate">Hai, {currentUser.name}</p>
         </div>
         
-        {/* Mobile Welcome Profile */}
         <div className="p-4 md:hidden border-b border-emerald-800 flex items-center space-x-3">
             <div className="w-10 h-10 rounded-full bg-emerald-700 flex items-center justify-center font-bold text-white uppercase">
               {currentUser.name.charAt(0)}
@@ -1316,7 +1317,6 @@ export default function App() {
           })}
         </nav>
 
-        {/* Tombol Logout di Bawah Sidebar */}
         <div className="p-4 mt-auto border-t border-emerald-800/50">
           <button 
             onClick={handleLogout}
@@ -1328,7 +1328,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 print:bg-white print:overflow-visible flex flex-col">
         <header className="bg-white border-b border-gray-100 px-8 py-4 hidden md:flex justify-between items-center print:hidden">
           <h2 className="text-xl font-semibold text-gray-800 capitalize">
@@ -1353,7 +1352,6 @@ export default function App() {
         </main>
       </div>
       
-      {/* Overlay untuk mobile sidebar */}
       {mobileMenuOpen && (
         <div 
           className="fixed inset-0 bg-black/50 z-0 md:hidden"
