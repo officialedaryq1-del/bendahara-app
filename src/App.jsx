@@ -1241,15 +1241,20 @@ export default function App() {
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-              <input 
-                type="text" 
+              <label className="block text-sm font-medium text-gray-700 mb-1">Pilih Pengguna</label>
+              <select 
                 value={loginUsername} 
                 onChange={(e) => setLoginUsername(e.target.value)}
                 required
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none bg-gray-50" 
-                placeholder="Masukkan username..."
-              />
+              >
+                <option value="" disabled>-- Pilih Pengguna --</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.username}>
+                    {u.name} (@{u.username})
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
