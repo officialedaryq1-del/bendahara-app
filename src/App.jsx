@@ -185,72 +185,78 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
     link.click();
   };
 
-  const handleImportCSV = (e) => {
-    const file = e.target.files[0];
+ const handleImportCSV = (event) => {
+    const file = event.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target.result;
-      const rows = text.split('\n').filter(r => r.trim().length > 0);
+    reader.onload = (e) => {
+      const text = e.target.result;
       
-      if(rows.length < 2) {
-        setImportMsg({ text: 'File CSV kosong atau format tidak valid.', type: 'error' });
+      // 1. Deteksi otomatis pemisah CSV (mendukung titik koma dari Excel Indonesia)
+      const delimiter = text.includes(';') ? ';' : ',';
+      
+      // 2. Pisahkan baris dan bersihkan spasi atau karakter 'enter' tersembunyi (\r)
+      const lines = text.split('\n').map(line => line.replace('\r', '').trim()).filter(line => line !== '');
+      
+      if (lines.length < 2) {
+        alert("File CSV kosong atau format tidak sesuai.");
         return;
       }
 
-      const delimiter = rows[0].includes(';') ? ';' : ',';
-      
-      const newTxs = [];
-      let successCount = 0;
-      let errorCount = 0;
+      // 3. Baca baris pertama sebagai Header
+      const headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase());
+      const importedTransactions = [];
 
-      for (let i = 1; i < rows.length; i++) {
-        const cols = rows[i].split(delimiter).map(c => c.trim().replace(/['"]/g, ''));
+      // 4. Deteksi posisi kolom secara dinamis 
+      const dateIdx = headers.findIndex(h => h.includes('tanggal'));
+      const typeIdx = headers.findIndex(h => h.includes('jenis'));
+      const descIdx = headers.findIndex(h => h.includes('keterangan'));
+      const amountIdx = headers.findIndex(h => h.includes('harga') || h.includes('nominal') || h.includes('saldo'));
+
+      if (dateIdx === -1 || typeIdx === -1 || descIdx === -1 || amountIdx === -1) {
+        alert("Gagal membaca template! Pastikan ada kolom Tanggal, Jenis, Keterangan, dan HargaSatuan.");
+        return;
+      }
+
+      // 5. Ekstrak data dari setiap baris
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(delimiter).map(v => v.trim());
         
-        if(cols[0] === '' && cols[6]?.includes('PENTING')) continue;
-
-        if (cols.length >= 6 && cols[0] !== '') {
-          const dateStr = cols[0];
-          let typeStr = cols[1].toLowerCase();
+        if (values.length > amountIdx) {
+          // Bersihkan angka dari segala macam tanda baca (titik, koma, spasi, kutip, "Rp")
+          let rawAmount = values[amountIdx].replace(/[^0-9]/g, '');
+          let amount = parseInt(rawAmount, 10);
           
-          if(typeStr.includes('in') || typeStr.includes('masuk') || typeStr.includes('pemasukan')) typeStr = 'in';
-          else if(typeStr.includes('out') || typeStr.includes('keluar') || typeStr.includes('pengeluaran')) typeStr = 'out';
+          // Bersihkan teks jenis dan normalisasi menjadi 'in' atau 'out'
+          let type = values[typeIdx].replace(/['"]/g, '').toLowerCase();
+          type = type.includes('in') ? 'in' : 'out'; 
           
-          const desc = cols[2];
-          const sat = cols[3];
-          const q = parseFloat(cols[4]);
-          const hrg = parseFloat(cols[5]);
+          let description = values[descIdx].replace(/['"]/g, '');
 
-          if (dateStr && (typeStr === 'in' || typeStr === 'out') && !isNaN(q) && !isNaN(hrg)) {
-            newTxs.push({
-              date: dateStr,
-              type: typeStr,
-              category: category,
-              description: desc,
-              satuan: sat,
-              qty: q,
-              hargaSatuan: hrg,
-              amount: q * hrg 
+          // Jika angkanya valid, masukkan ke daftar transaksi baru
+          if (!isNaN(amount) && amount > 0) {
+            importedTransactions.push({
+              id: Date.now() + i, 
+              date: values[dateIdx],
+              type: type,
+              description: description,
+              amount: amount
             });
-            successCount++;
-          } else {
-            errorCount++;
           }
         }
       }
 
-      if (newTxs.length > 0) {
-        onBulkAddTransactions(newTxs);
-        setImportMsg({ text: `Berhasil mengimpor ${successCount} transaksi. ${errorCount > 0 ? `(Baris terabaikan/error: ${errorCount})` : ''}`, type: 'success' });
+      if (importedTransactions.length > 0) {
+        // Simpan data yang berhasil diimpor ke dalam state
+        setTransactions(prev => [...prev, ...importedTransactions]);
+        alert(`Berhasil mengimpor ${importedTransactions.length} data transaksi!`);
       } else {
-        setImportMsg({ text: 'Tidak ada data valid yang bisa diimpor. Pastikan mengikuti format template.', type: 'error' });
+        alert("Tidak ada data valid yang bisa diimpor. Pastikan mengikuti format template.");
       }
-      
-      e.target.value = ''; 
-      setTimeout(() => setImportMsg({ text: '', type: '' }), 8000); 
     };
     reader.readAsText(file);
+    event.target.value = ''; // Reset input agar bisa unggah ulang file jika salah
   };
 
   return (
