@@ -241,7 +241,7 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
         }
 
         if (importedTransactions.length > 0) {
-          props.setTransactions(prev => [...prev, ...importedTransactions]);
+          importedTransactions.forEach(tx => onAddTransaction(tx));
           alert(`Berhasil mengimpor ${importedTransactions.length} data transaksi!`);
         } else {
           alert("Tidak ada data transaksi yang valid. Cek isi baris file CSV Anda.");
