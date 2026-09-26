@@ -1,0 +1,1365 @@
+import React, { useState, useMemo } from 'react';
+import { 
+  LayoutDashboard, 
+  Wallet, 
+  ShieldCheck, 
+  Plus, 
+  ArrowUpCircle, 
+  ArrowDownCircle, 
+  Trash2, 
+  Menu,
+  X,
+  TrendingUp,
+  Filter,
+  Calendar,
+  Activity,
+  FileText,
+  FileSpreadsheet,
+  Download,
+  Upload,
+  Settings,
+  LogOut,
+  Users,
+  Lock,
+  UserPlus
+} from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+
+// Data User untuk demo Login
+const initialUsers = [
+  { id: 1, username: 'admin', password: '123', role: 'admin', name: 'Administrator Utama' },
+  { id: 2, username: 'tukin', password: '123', role: 'user_tukin', name: 'Bendahara Tukin' },
+  { id: 3, username: 'keamanan', password: '123', role: 'user_keamanan', name: 'Bendahara Keamanan' },
+];
+
+// Data awal (mock data) untuk demonstrasi
+const initialTransactions = [
+  { id: 1, date: '2026-09-20', type: 'in', category: 'tukin', qty: 1, satuan: 'Bln', hargaSatuan: 5000000, amount: 5000000, description: 'Iuran Tukin Santri Baru Gelombang 1' },
+  { id: 2, date: '2026-09-21', type: 'out', category: 'tukin', qty: 3, satuan: 'Org', hargaSatuan: 500000, amount: 1500000, description: 'Pembayaran honor pengajar Tukin' },
+  { id: 3, date: '2026-09-22', type: 'in', category: 'keamanan', qty: 1, satuan: 'Bln', hargaSatuan: 2000000, amount: 2000000, description: 'Iuran Keamanan Bulanan September' },
+  { id: 4, date: '2026-09-23', type: 'out', category: 'keamanan', qty: 2, satuan: 'Pekerja', hargaSatuan: 150000, amount: 300000, description: 'Perbaikan gerbang utara' },
+  { id: 5, date: '2026-09-25', type: 'in', category: 'tukin', qty: 1, satuan: 'Org', hargaSatuan: 1000000, amount: 1000000, description: 'Susulan Iuran Tukin' },
+];
+
+const formatRupiah = (number) => {
+  return new Intl.NumberFormat('id-ID', {
+    style: 'currency',
+    currency: 'IDR',
+    minimumFractionDigits: 0
+  }).format(number);
+};
+
+const formatDate = (dateString) => {
+  const options = { year: 'numeric', month: 'long', day: 'numeric' };
+  return new Date(dateString).toLocaleDateString('id-ID', options);
+};
+
+const applyDateFilter = (data, filterType, filterMonth, dateRange, dateKey = 'date') => {
+  if (filterType === 'all') return data;
+  return data.filter(item => {
+    const itemDate = new Date(item[dateKey]);
+    if (filterType === 'month') {
+      if (!filterMonth) return true;
+      const itemMonth = `${itemDate.getFullYear()}-${String(itemDate.getMonth() + 1).padStart(2, '0')}`;
+      return itemMonth === filterMonth;
+    }
+    if (filterType === 'range') {
+      const start = dateRange.start ? new Date(dateRange.start) : new Date('2000-01-01');
+      const end = dateRange.end ? new Date(dateRange.end) : new Date('2100-01-01');
+      end.setHours(23, 59, 59, 999); // Akhir hari
+      return itemDate >= start && itemDate <= end;
+    }
+    return true;
+  });
+};
+
+const DateFilter = ({ filterType, setFilterType, filterMonth, setFilterMonth, dateRange, setDateRange }) => {
+  return (
+    <div className="flex flex-col sm:flex-row gap-3 sm:items-center bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-6 animate-in fade-in print:hidden">
+      <div className="flex items-center gap-2 text-gray-600 font-medium min-w-max">
+        <Filter className="w-5 h-5 text-emerald-600" /> 
+        <span>Filter Waktu:</span>
+      </div>
+      <select 
+        value={filterType} 
+        onChange={(e) => setFilterType(e.target.value)}
+        className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-sm bg-gray-50"
+      >
+        <option value="all">Semua Waktu</option>
+        <option value="month">Pilih Bulan</option>
+        <option value="range">Rentang Waktu</option>
+      </select>
+
+      {filterType === 'month' && (
+        <input 
+          type="month" 
+          value={filterMonth}
+          onChange={(e) => setFilterMonth(e.target.value)}
+          className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm bg-gray-50 flex-1 sm:flex-none"
+        />
+      )}
+
+      {filterType === 'range' && (
+        <div className="flex items-center gap-2 flex-1 sm:flex-none">
+          <input 
+            type="date" 
+            value={dateRange.start}
+            onChange={(e) => setDateRange({...dateRange, start: e.target.value})}
+            className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm w-full bg-gray-50"
+          />
+          <span className="text-gray-500">-</span>
+          <input 
+            type="date" 
+            value={dateRange.end}
+            onChange={(e) => setDateRange({...dateRange, end: e.target.value})}
+            className="p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm w-full bg-gray-50"
+          />
+        </div>
+      )}
+    </div>
+  );
+};
+
+const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) => {
+  const [type, setType] = useState('in');
+  const [description, setDescription] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [satuan, setSatuan] = useState('');
+  const [qty, setQty] = useState(1);
+  const [hargaSatuan, setHargaSatuan] = useState('');
+  const [amount, setAmount] = useState(''); 
+  const [importMsg, setImportMsg] = useState({ text: '', type: '' });
+
+  const handleQtyChange = (e) => {
+    const val = e.target.value;
+    setQty(val);
+    // Kalkulasi otomatis saat Qty berubah
+    const calc = (parseFloat(val) || 0) * (parseFloat(hargaSatuan) || 0);
+    setAmount(calc || '');
+  };
+
+  const handleHargaChange = (e) => {
+    const val = e.target.value;
+    setHargaSatuan(val);
+    // Kalkulasi otomatis saat Harga berubah
+    const calc = (parseFloat(qty) || 0) * (parseFloat(val) || 0);
+    setAmount(calc || '');
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const finalAmount = parseFloat(amount) || 0;
+    if (!finalAmount || !description || !date) return;
+    
+    onAddTransaction({
+      date,
+      type,
+      category,
+      satuan: satuan || '-',
+      qty: parseFloat(qty) || 1,
+      hargaSatuan: parseFloat(hargaSatuan) || 0,
+      amount: finalAmount, 
+      description
+    });
+    
+    setSatuan('');
+    setQty(1);
+    setHargaSatuan('');
+    setAmount('');
+    setDescription('');
+  };
+
+  const downloadTemplate = () => {
+    // Menggunakan pemisah Titik Koma (;) agar langsung terpisah kolomnya di MS Excel versi Indonesia
+    const headers = "Tanggal;Jenis (in/out);Keterangan;Satuan;Qty;HargaSatuan;Saldo\n";
+    const example1 = "2026-09-25;in;Pemasukan Contoh Tukin;Bulan;1;500000;500000\n";
+    const example2 = "2026-09-26;out;Pengeluaran Contoh Tukin;Pcs;2;50000;400000\n";
+    const note = ";;;;;;PENTING: Jenis harus diisi 'in' (Pemasukan) atau 'out' (Pengeluaran). Format Tanggal YYYY-MM-DD. Kolom Saldo diabaikan saat diimpor karena aplikasi menghitungnya otomatis.\n";
+    
+    // Menambahkan BOM (Byte Order Mark) agar karakter dibaca UTF-8 dengan benar oleh Excel
+    const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+    const blob = new Blob([bom, headers + example1 + example2 + note], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = "Template_Import_Transaksi.csv";
+    link.click();
+  };
+
+  const handleImportCSV = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target.result;
+      const rows = text.split('\n').filter(r => r.trim().length > 0);
+      
+      if(rows.length < 2) {
+        setImportMsg({ text: 'File CSV kosong atau format tidak valid.', type: 'error' });
+        return;
+      }
+
+      // Deteksi otomatis apakah file Excel menyimpannya dengan koma (,) atau titik koma (;)
+      const delimiter = rows[0].includes(';') ? ';' : ',';
+      
+      const newTxs = [];
+      let successCount = 0;
+      let errorCount = 0;
+
+      // Mulai dari i=1 untuk melewati header
+      for (let i = 1; i < rows.length; i++) {
+        // Pembersihan tanda kutip berlebih dari format bawaan Excel
+        const cols = rows[i].split(delimiter).map(c => c.trim().replace(/['"]/g, ''));
+        
+        // Abaikan baris catatan PENTING jika user lupa menghapusnya
+        if(cols[0] === '' && cols[6]?.includes('PENTING')) continue;
+
+        if (cols.length >= 6 && cols[0] !== '') {
+          const dateStr = cols[0];
+          let typeStr = cols[1].toLowerCase();
+          
+          // Sistem bisa membaca jika user menulis "in", "masuk", "out", "keluar"
+          if(typeStr.includes('in') || typeStr.includes('masuk') || typeStr.includes('pemasukan')) typeStr = 'in';
+          else if(typeStr.includes('out') || typeStr.includes('keluar') || typeStr.includes('pengeluaran')) typeStr = 'out';
+          
+          const desc = cols[2];
+          const sat = cols[3];
+          const q = parseFloat(cols[4]);
+          const hrg = parseFloat(cols[5]);
+
+          if (dateStr && (typeStr === 'in' || typeStr === 'out') && !isNaN(q) && !isNaN(hrg)) {
+            newTxs.push({
+              date: dateStr,
+              type: typeStr,
+              category: category,
+              description: desc,
+              satuan: sat,
+              qty: q,
+              hargaSatuan: hrg,
+              amount: q * hrg // Sistem memverifikasi ulang angka aslinya
+            });
+            successCount++;
+          } else {
+            errorCount++;
+          }
+        }
+      }
+
+      if (newTxs.length > 0) {
+        onBulkAddTransactions(newTxs);
+        setImportMsg({ text: `Berhasil mengimpor ${successCount} transaksi. ${errorCount > 0 ? `(Baris terabaikan/error: ${errorCount})` : ''}`, type: 'success' });
+      } else {
+        setImportMsg({ text: 'Tidak ada data valid yang bisa diimpor. Pastikan mengikuti format template.', type: 'error' });
+      }
+      
+      e.target.value = ''; // Reset form input file
+      setTimeout(() => setImportMsg({ text: '', type: '' }), 8000); // Hilangkan pesan setelah 8 detik
+    };
+    reader.readAsText(file);
+  };
+
+  return (
+    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 mb-6 animate-in fade-in">
+      <form onSubmit={handleSubmit}>
+        <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+          <Plus className="w-5 h-5 mr-2 text-emerald-600" />
+          Tambah Transaksi {category === 'tukin' ? 'Tukin' : 'Keamanan'}
+        </h3>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Jenis Transaksi</label>
+            <select value={type} onChange={(e) => setType(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm">
+              <option value="in">Pemasukan (+)</option>
+              <option value="out">Pengeluaran (-)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal</label>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
+          </div>
+          <div className="md:col-span-2 lg:col-span-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Keterangan</label>
+            <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} required placeholder="Contoh: Beli Token Listrik" className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Satuan (Opsional)</label>
+            <input type="text" value={satuan} onChange={(e) => setSatuan(e.target.value)} placeholder="Misal: Pcs, Kg, Bulan" className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Qty</label>
+            <input type="number" value={qty} onChange={handleQtyChange} min="0.01" step="0.01" required className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Harga / Satuan (Rp)</label>
+            <input type="number" value={hargaSatuan} onChange={handleHargaChange} required className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
+          </div>
+          
+          <div className="md:col-span-2 lg:col-span-3">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Total (Rp) - <span className="text-gray-400 font-normal">Bisa diedit manual jika ada diskon</span></label>
+            <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} required className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-emerald-700 bg-emerald-50" />
+          </div>
+        </div>
+
+        <div className="mt-6 flex justify-end">
+          <button 
+            type="submit"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-lg font-medium transition-colors duration-200 shadow-sm"
+          >
+            Simpan Transaksi
+          </button>
+        </div>
+      </form>
+
+      {/* Bagian Import CSV */}
+      <div className="mt-8 pt-6 border-t border-gray-100">
+        <h3 className="text-md font-semibold text-gray-700 mb-4 flex items-center">
+          <Upload className="w-4 h-4 mr-2 text-blue-600" />
+          Import Massal via CSV
+        </h3>
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+          <button
+            type="button"
+            onClick={downloadTemplate}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium border border-blue-200"
+          >
+            <Download className="w-4 h-4" />
+            Unduh Template CSV
+          </button>
+          
+          <div className="relative">
+            <input 
+              type="file" 
+              accept=".csv" 
+              onChange={handleImportCSV}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              title="Pilih file CSV"
+            />
+            <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors text-sm font-medium border border-gray-200">
+              <Upload className="w-4 h-4" />
+              Unggah File CSV
+            </div>
+          </div>
+        </div>
+        
+        {importMsg.text && (
+          <div className={`mt-4 p-3 rounded-lg text-sm font-medium animate-in fade-in flex items-center ${importMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+            {importMsg.text}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const TransactionList = ({ transactions, onDelete }) => {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-100 text-gray-600 text-sm">
+              <th className="p-4 font-semibold">Tanggal</th>
+              <th className="p-4 font-semibold">Keterangan</th>
+              <th className="p-4 font-semibold">Satuan</th>
+              <th className="p-4 font-semibold text-center">Qty</th>
+              <th className="p-4 font-semibold text-right">Harga/Sat</th>
+              <th className="p-4 font-semibold text-right">Pemasukan</th>
+              <th className="p-4 font-semibold text-right">Pengeluaran</th>
+              <th className="p-4 font-semibold text-center">Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            {transactions.length === 0 ? (
+              <tr>
+                <td colSpan="8" className="p-8 text-center text-gray-400">Belum ada data transaksi.</td>
+              </tr>
+            ) : (
+              transactions.map((t) => (
+                <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                  <td className="p-4 text-sm text-gray-600 whitespace-nowrap">{formatDate(t.date)}</td>
+                  <td className="p-4 text-sm font-medium text-gray-800">{t.description}</td>
+                  <td className="p-4 text-sm text-gray-600">{t.satuan || '-'}</td>
+                  <td className="p-4 text-sm text-gray-600 text-center">{t.qty || '-'}</td>
+                  <td className="p-4 text-sm text-right text-gray-600 whitespace-nowrap">{t.hargaSatuan ? formatRupiah(t.hargaSatuan) : '-'}</td>
+                  <td className="p-4 text-sm text-right text-emerald-600 font-semibold whitespace-nowrap">
+                    {t.type === 'in' ? formatRupiah(t.amount) : '-'}
+                  </td>
+                  <td className="p-4 text-sm text-right text-red-500 font-semibold whitespace-nowrap">
+                    {t.type === 'out' ? formatRupiah(t.amount) : '-'}
+                  </td>
+                  <td className="p-4 text-center">
+                    <button 
+                      onClick={() => onDelete(t.id)}
+                      className="text-red-400 hover:text-red-600 transition-colors p-2 rounded-md hover:bg-red-50"
+                      title="Hapus"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+const RekapList = ({ data }) => {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden print:border-none print:shadow-none">
+      <div className="overflow-x-auto print:overflow-visible">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-emerald-50 border-b border-emerald-100 text-emerald-800 text-sm print:bg-transparent print:border-gray-800">
+              <th className="p-4 font-semibold">Tanggal</th>
+              <th className="p-4 font-semibold">Keterangan</th>
+              <th className="p-4 font-semibold">Satuan</th>
+              <th className="p-4 font-semibold text-center">Qty</th>
+              <th className="p-4 font-semibold text-right">Harga/Sat</th>
+              <th className="p-4 font-semibold text-right">Pemasukan</th>
+              <th className="p-4 font-semibold text-right">Pengeluaran</th>
+              <th className="p-4 font-semibold text-right">Saldo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.length === 0 ? (
+              <tr>
+                <td colSpan="8" className="p-8 text-center text-gray-400">Belum ada data rekap.</td>
+              </tr>
+            ) : (
+              data.map((t) => (
+                <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                  <td className="p-4 text-sm text-gray-600 whitespace-nowrap">{formatDate(t.date)}</td>
+                  <td className="p-4 text-sm font-medium text-gray-800">{t.description}</td>
+                  <td className="p-4 text-sm text-gray-600">{t.satuan || '-'}</td>
+                  <td className="p-4 text-sm text-gray-600 text-center">{t.qty || '-'}</td>
+                  <td className="p-4 text-sm text-right text-gray-600 whitespace-nowrap">{t.hargaSatuan ? formatRupiah(t.hargaSatuan) : '-'}</td>
+                  <td className="p-4 text-sm text-right text-emerald-600 font-semibold whitespace-nowrap">
+                    {t.type === 'in' ? formatRupiah(t.amount) : '-'}
+                  </td>
+                  <td className="p-4 text-sm text-right text-red-500 font-semibold whitespace-nowrap">
+                    {t.type === 'out' ? formatRupiah(t.amount) : '-'}
+                  </td>
+                  <td className="p-4 text-sm text-right text-blue-700 font-bold bg-blue-50/30 whitespace-nowrap">
+                    {formatRupiah(t.saldo)}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkAddTransactions, onDeleteTransaction }) => {
+  const [activeSubTab, setActiveSubTab] = useState('input');
+  
+  const [filterType, setFilterType] = useState('all');
+  const [filterMonth, setFilterMonth] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [kopImage, setKopImage] = useState(null);
+
+  const handleKopUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setKopImage(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const rekapData = useMemo(() => {
+    // Urutkan dari yang terlama ke terbaru untuk menghitung saldo berjalan
+    const sorted = [...transactions].sort((a, b) => new Date(a.date) - new Date(b.date));
+    let currentSaldo = 0;
+    return sorted.map(t => {
+      if (t.type === 'in') currentSaldo += t.amount;
+      if (t.type === 'out') currentSaldo -= t.amount;
+      return { ...t, saldo: currentSaldo };
+    });
+  }, [transactions]);
+
+  const filteredRekapData = useMemo(() => {
+    return applyDateFilter(rekapData, filterType, filterMonth, dateRange);
+  }, [rekapData, filterType, filterMonth, dateRange]);
+
+  const filteredHistoryData = useMemo(() => {
+    const reversed = [...transactions].sort((a,b) => new Date(b.date) - new Date(a.date));
+    return applyDateFilter(reversed, filterType, filterMonth, dateRange);
+  }, [transactions, filterType, filterMonth, dateRange]);
+
+  const exportToExcel = () => {
+    const headers = ['Tanggal', 'Keterangan', 'Satuan', 'Qty', 'Harga/Satuan (Rp)', 'Pemasukan (Rp)', 'Pengeluaran (Rp)', 'Saldo (Rp)'];
+    const csvRows = filteredRekapData.map(t => [
+      t.date,
+      `"${t.description.replace(/"/g, '""')}"`, // Handle quotes in description
+      `"${t.satuan || '-'}"`,
+      t.qty || '-',
+      t.hargaSatuan || 0,
+      t.type === 'in' ? t.amount : 0,
+      t.type === 'out' ? t.amount : 0,
+      t.saldo
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...csvRows.map(row => row.join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `Rekap_${title}_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportToPDF = async () => {
+    try {
+      // 1. Memuat jsPDF secara dinamis melalui CDN (Workaround untuk environment tanpa NPM)
+      if (!window.jspdf) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+      }
+      
+      // 2. Memuat jsPDF-AutoTable secara dinamis
+      if (!window.jspdf.jsPDF.API.autoTable) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js';
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+      }
+      
+      // Inisialisasi jsPDF (Orientasi Landscape agar kolom muat dan tidak terlalu sempit)
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: 'landscape' });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      
+      let startYPos = 45;
+
+      if (kopImage) {
+        // Jika user mengunggah gambar Kop Surat
+        // Format (gambar, Tipe, PosisiX, PosisiY, Lebar, Tinggi)
+        // Menggunakan 'PNG' dan menambah tinggi dari 28 ke 45 agar proporsional dan tidak gepeng
+        doc.addImage(kopImage, 'PNG', 14, 10, pageWidth - 28, 45);
+        
+        // Garis manual DIHAPUS karena gambar kopp.PNG sudah memiliki garis pembatas sendiri
+        
+        startYPos = 65; // Menurunkan posisi judul tabel karena tinggi gambar kop ditambah
+      } else {
+        // --- KOP SURAT TEKS (Default jika tidak ada file) ---
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(18);
+        doc.setTextColor(15, 23, 42); // Warna teks gelap
+        doc.text("PONDOK TAHFIDH YANBU'UL QURA'AN 1 PATI", pageWidth / 2, 16, { align: 'center' });
+        
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(71, 85, 105); 
+        doc.text("Jl. Raya Margorejo - Pati Km. 5, Kabupaten Pati, Jawa Tengah 59163", pageWidth / 2, 22, { align: 'center' });
+        doc.text("Telepon: (0295) 1234567 | Email: info@binainsani-pati.sch.id", pageWidth / 2, 27, { align: 'center' });
+        
+        // Garis Ganda Pembatas Kop
+        doc.setDrawColor(15, 23, 42);
+        doc.setLineWidth(0.8);
+        doc.line(14, 32, pageWidth - 14, 32); // Garis tebal atas
+        doc.setLineWidth(0.2);
+        doc.line(14, 33.5, pageWidth - 14, 33.5); // Garis tipis bawah
+        
+        startYPos = 45;
+      }
+
+      // --- JUDUL LAPORAN ---
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14);
+      doc.setTextColor(15, 23, 42);
+      doc.text(`LAPORAN KEUANGAN - ${title.toUpperCase()}`, pageWidth / 2, startYPos, { align: 'center' });
+      
+      // Keterangan Tanggal Cetak
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Periode Cetak: ${formatDate(new Date().toISOString())}`, pageWidth / 2, startYPos + 6, { align: 'center' });
+
+      // Persiapan Data Tabel
+      const tableColumn = ["No.", "Tanggal", "Keterangan", "Satuan", "Qty", "Harga/Sat", "Pemasukan", "Pengeluaran", "Saldo"];
+      const tableRows = [];
+
+      filteredRekapData.forEach((t, index) => {
+        const rowData = [
+          index + 1,
+          formatDate(t.date),
+          t.description,
+          t.satuan || '-',
+          t.qty || '-',
+          t.hargaSatuan ? formatRupiah(t.hargaSatuan) : '-',
+          t.type === 'in' ? formatRupiah(t.amount) : '-',
+          t.type === 'out' ? formatRupiah(t.amount) : '-',
+          formatRupiah(t.saldo)
+        ];
+        tableRows.push(rowData);
+      });
+
+      // Generate Tabel (Turunkan startY agar tidak menabrak Kop Surat)
+      doc.autoTable({
+        head: [tableColumn],
+        body: tableRows,
+        startY: startYPos + 12,
+        theme: 'grid',
+        styles: { fontSize: 8, cellPadding: 3 },
+        headStyles: { fillColor: [5, 150, 105], textColor: 255 }, // Warna hijau emerald
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        columnStyles: {
+          8: { fontStyle: 'bold' } // Membuat kolom indeks ke-8 (Saldo) menjadi cetak tebal
+        }
+      });
+
+      // Eksekusi Unduh File otomatis
+      doc.save(`Rekap_${title}_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (error) {
+      console.error("Gagal memuat library PDF", error);
+      // Di aplikasi nyata, kita akan memberikan notifikasi pop-up yang elegan
+    }
+  };
+
+  return (
+    <div className="space-y-6 print:space-y-4">
+      <h2 className="text-2xl font-bold text-gray-800">{title}</h2>
+      
+      {/* Sub Menu / Sub Tabs */}
+      <div className="flex flex-wrap gap-3 mb-6 border-b border-gray-200 pb-4 print:hidden">
+        <button 
+          onClick={() => setActiveSubTab('input')}
+          className={`px-5 py-2.5 rounded-lg font-medium transition-all duration-200 text-sm md:text-base flex-1 md:flex-none text-center ${activeSubTab === 'input' ? 'bg-emerald-600 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'}`}
+        >
+          Input Transaksi
+        </button>
+        <button 
+          onClick={() => setActiveSubTab('rekap')}
+          className={`px-5 py-2.5 rounded-lg font-medium transition-all duration-200 text-sm md:text-base flex-1 md:flex-none text-center ${activeSubTab === 'rekap' ? 'bg-emerald-600 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'}`}
+        >
+          Rekap Transaksi
+        </button>
+        <button 
+          onClick={() => setActiveSubTab('riwayat')}
+          className={`px-5 py-2.5 rounded-lg font-medium transition-all duration-200 text-sm md:text-base flex-1 md:flex-none text-center ${activeSubTab === 'riwayat' ? 'bg-emerald-600 text-white shadow-md' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'}`}
+        >
+          Riwayat Transaksi
+        </button>
+      </div>
+
+      {/* Tampilkan filter khusus untuk sub tab Rekap dan Riwayat */}
+      {(activeSubTab === 'rekap' || activeSubTab === 'riwayat') && (
+        <DateFilter 
+          filterType={filterType} setFilterType={setFilterType}
+          filterMonth={filterMonth} setFilterMonth={setFilterMonth}
+          dateRange={dateRange} setDateRange={setDateRange}
+        />
+      )}
+
+      {/* Sub Content */}
+  <div className="animate-in fade-in duration-300">
+    {activeSubTab === 'input' && (
+      <TransactionForm 
+        onAddTransaction={onAddTransaction} 
+        onBulkAddTransactions={onBulkAddTransactions}
+        category={category} 
+      />
+    )}
+    {activeSubTab === 'rekap' && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap justify-end gap-3 mb-2 print:hidden">
+              <label className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer border ${kopImage ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'}`}>
+                <span>{kopImage ? '✅ Gambar Kop Terpasang' : '🖼️ Pilih File Kop (Opsional)'}</span>
+                <input type="file" accept="image/*" onChange={handleKopUpload} className="hidden" />
+              </label>
+              <button 
+                onClick={exportToExcel}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Export Excel
+              </button>
+              <button 
+                onClick={exportToPDF}
+                className="flex items-center gap-2 bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                <FileText className="w-4 h-4" />
+                Export PDF
+              </button>
+            </div>
+            <div className="flex justify-between items-center bg-blue-50 p-4 rounded-xl border border-blue-100 print:bg-transparent print:border-none print:p-0">
+              <span className="text-blue-800 font-medium print:text-black">Total Saldo {category === 'tukin' ? 'Tukin' : 'Keamanan'} (Akhir Periode):</span>
+              <span className="text-xl font-bold text-blue-700 print:text-black">
+                {formatRupiah(filteredRekapData.length > 0 ? filteredRekapData[filteredRekapData.length - 1].saldo : 0)}
+              </span>
+            </div>
+            <RekapList data={filteredRekapData} />
+          </div>
+        )}
+        {activeSubTab === 'riwayat' && (
+          <TransactionList 
+            transactions={filteredHistoryData} 
+            onDelete={onDeleteTransaction}
+          />
+        )}
+      </div>
+    </div>
+  );
+};
+
+const Dashboard = ({ transactions, role }) => {
+  const [filterType, setFilterType] = useState('all');
+  const [filterMonth, setFilterMonth] = useState(() => {
+    const today = new Date();
+    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [showHistory, setShowHistory] = useState(false);
+
+  const filteredTransactions = useMemo(() => {
+    return applyDateFilter(transactions, filterType, filterMonth, dateRange);
+  }, [transactions, filterType, filterMonth, dateRange]);
+
+  const stats = useMemo(() => {
+    // 1. Hitung total saldo absolut (tidak terpengaruh filter tanggal)
+    let absoluteTotalIn = 0, absoluteTotalOut = 0;
+    let absoluteTukinIn = 0, absoluteTukinOut = 0;
+    let absoluteKeamananIn = 0, absoluteKeamananOut = 0;
+
+    transactions.forEach(t => {
+      if (t.type === 'in') {
+        absoluteTotalIn += t.amount;
+        if (t.category === 'tukin') absoluteTukinIn += t.amount;
+        if (t.category === 'keamanan') absoluteKeamananIn += t.amount;
+      } else {
+        absoluteTotalOut += t.amount;
+        if (t.category === 'tukin') absoluteTukinOut += t.amount;
+        if (t.category === 'keamanan') absoluteKeamananOut += t.amount;
+      }
+    });
+
+    // 2. Hitung arus kas khusus untuk periode yang difilter
+    let periodIn = 0, periodOut = 0;
+    filteredTransactions.forEach(t => {
+      if (t.type === 'in') periodIn += t.amount;
+      else periodOut += t.amount;
+    });
+
+    return {
+      totalSaldo: absoluteTotalIn - absoluteTotalOut,
+      tukinSaldo: absoluteTukinIn - absoluteTukinOut,
+      keamananSaldo: absoluteKeamananIn - absoluteKeamananOut,
+      periodIn,
+      periodOut
+    };
+  }, [transactions, filteredTransactions]);
+
+  const chartData = useMemo(() => {
+    const grouped = {};
+    filteredTransactions.forEach(t => {
+      const dateStr = t.date;
+      if (!grouped[dateStr]) grouped[dateStr] = { date: dateStr, label: formatDate(dateStr), Pemasukan: 0, Pengeluaran: 0 };
+      if (t.type === 'in') grouped[dateStr].Pemasukan += t.amount;
+      if (t.type === 'out') grouped[dateStr].Pengeluaran += t.amount;
+    });
+    return Object.values(grouped).sort((a, b) => new Date(a.date) - new Date(b.date));
+  }, [filteredTransactions]);
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white p-3 border border-gray-200 shadow-md rounded-lg">
+          <p className="font-semibold text-gray-800 mb-2">{label}</p>
+          {payload.map((entry, index) => (
+            <p key={index} className="text-sm font-medium" style={{ color: entry.color }}>
+              {entry.name}: {formatRupiah(entry.value)}
+            </p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <div className="space-y-6">
+      <DateFilter 
+        filterType={filterType} setFilterType={setFilterType}
+        filterMonth={filterMonth} setFilterMonth={setFilterMonth}
+        dateRange={dateRange} setDateRange={setDateRange}
+      />
+
+      <div className={`grid grid-cols-1 md:grid-cols-${role === 'admin' ? '3' : '1'} gap-6`}>
+        {/* Card Total Saldo (Tampil untuk Admin, atau menyesuaikan role) */}
+        <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden flex flex-col">
+          <div className="absolute top-0 right-0 p-4 opacity-20">
+            <TrendingUp className="w-24 h-24" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-emerald-100 font-medium mb-1 relative z-10">
+              {role === 'admin' ? 'Total Saldo Pondok Saat Ini' : `Total Saldo Kas ${role === 'user_tukin' ? 'Tukin' : 'Keamanan'}`}
+            </h3>
+            <div className="text-3xl font-bold mb-4 relative z-10">
+              {formatRupiah(
+                role === 'admin' ? stats.totalSaldo : 
+                role === 'user_tukin' ? stats.tukinSaldo : stats.keamananSaldo
+              )}
+            </div>
+          </div>
+          
+          <div className="mt-4 pt-4 border-t border-emerald-500/50">
+            <h4 className="text-xs text-emerald-200 mb-2 uppercase tracking-wider font-semibold">Arus Kas Periode Terpilih</h4>
+            <div className="flex justify-between items-center text-sm relative z-10">
+              <div className="flex items-center">
+                <ArrowUpCircle className="w-4 h-4 mr-1 text-emerald-300" />
+                <span>{formatRupiah(stats.periodIn)}</span>
+              </div>
+              <div className="flex items-center">
+                <ArrowDownCircle className="w-4 h-4 mr-1 text-red-300" />
+                <span>{formatRupiah(stats.periodOut)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card Saldo Tukin (Hanya Tampil Jika Admin) */}
+        {role === 'admin' && (
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
+            <div>
+              <div className="flex justify-between items-start mb-4">
+                <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
+                  <Wallet className="w-6 h-6" />
+                </div>
+              </div>
+              <h3 className="text-gray-500 font-medium mb-1">Saldo Kas Tukin</h3>
+              <div className="text-2xl font-bold text-gray-800">{formatRupiah(stats.tukinSaldo)}</div>
+            </div>
+          </div>
+        )}
+
+        {/* Card Saldo Keamanan (Hanya Tampil Jika Admin) */}
+        {role === 'admin' && (
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col justify-between">
+            <div>
+              <div className="flex justify-between items-start mb-4">
+                <div className="p-3 bg-orange-50 text-orange-600 rounded-xl">
+                  <ShieldCheck className="w-6 h-6" />
+                </div>
+              </div>
+              <h3 className="text-gray-500 font-medium mb-1">Saldo Kas Keamanan</h3>
+              <div className="text-2xl font-bold text-gray-800">{formatRupiah(stats.keamananSaldo)}</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Grafik Arus Kas */}
+        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 p-6 animate-in fade-in">
+          <h3 className="text-lg font-semibold text-gray-800 mb-6 flex items-center">
+            <TrendingUp className="w-5 h-5 mr-2 text-emerald-600"/>
+            Grafik Arus Kas
+          </h3>
+          {chartData.length > 0 ? (
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                  <XAxis dataKey="label" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
+                  <YAxis 
+                    tickFormatter={(val) => new Intl.NumberFormat('id-ID', { notation: "compact", compactDisplay: "short" }).format(val)} 
+                    tick={{ fontSize: 12 }} 
+                    tickLine={false} 
+                    axisLine={false} 
+                    width={70} 
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{ paddingTop: '20px' }}/>
+                  <Bar dataKey="Pemasukan" fill="#059669" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                  <Bar dataKey="Pengeluaran" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-72 flex items-center justify-center text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+              Tidak ada data transaksi untuk rentang waktu ini
+            </div>
+          )}
+        </div>
+
+        {/* Total Transaksi Card (Clickable) */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col animate-in fade-in">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+            <Activity className="w-5 h-5 mr-2 text-emerald-600"/>
+            Total Transaksi
+          </h3>
+          
+          <div 
+            onClick={() => setShowHistory(!showHistory)}
+            className="flex-1 bg-emerald-50/50 rounded-xl border-2 border-dashed border-emerald-200 p-6 flex flex-col items-center justify-center cursor-pointer hover:bg-emerald-50 hover:border-emerald-400 transition-all duration-300 group"
+          >
+            <div className="text-6xl font-bold text-emerald-600 group-hover:scale-110 transition-transform mb-2">
+              {filteredTransactions.length}
+            </div>
+            <div className="text-gray-600 font-medium text-center">Item Transaksi</div>
+            <div className="text-sm bg-white px-4 py-1.5 rounded-full shadow-sm text-emerald-600 mt-6 font-medium group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+              {showHistory ? 'Tutup Riwayat' : 'Lihat Detail Riwayat'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Expanded View for History */}
+      {showHistory && (
+        <div className="bg-white rounded-xl shadow-md border border-emerald-100 p-6 animate-in slide-in-from-top-4 mt-6 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-2 h-full bg-emerald-500"></div>
+            <div className="flex justify-between items-center mb-6 pl-4">
+              <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                <Calendar className="w-5 h-5 mr-2 text-emerald-600"/>
+                Detail Riwayat Transaksi (Periode Terpilih)
+              </h3>
+              <button 
+                onClick={() => setShowHistory(false)} 
+                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="pl-4">
+              <TransactionList 
+                transactions={filteredTransactions.sort((a, b) => new Date(b.date) - new Date(a.date))} 
+                onDelete={() => {}} // Disabled on dashboard
+              />
+            </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const SettingsView = ({ users, onAddUser, onDeleteUser }) => {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [role, setRole] = useState('user_tukin');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!username || !password || !name) return;
+    
+    // Cek apakah username sudah ada
+    if (users.some(u => u.username === username)) {
+      alert("Username sudah digunakan!"); // Exception permitted for basic mock error handling in settings
+      return;
+    }
+
+    onAddUser({ username, password, role, name });
+    setUsername('');
+    setPassword('');
+    setName('');
+    setRole('user_tukin');
+  };
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold text-gray-800 flex items-center">
+        <Settings className="w-6 h-6 mr-3 text-emerald-600" />
+        Pengaturan Sistem
+      </h2>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Form Tambah User */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center border-b border-gray-100 pb-3">
+            <UserPlus className="w-5 h-5 mr-2 text-emerald-600" />
+            Tambah Pengguna Baru
+          </h3>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap</label>
+              <input type="text" value={name} onChange={(e) => setName(e.target.value)} required placeholder="Contoh: Ust. Ahmad" className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Username (Untuk Login)</label>
+              <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required placeholder="Tanpa spasi" className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Hak Akses (Role)</label>
+              <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm bg-gray-50">
+                <option value="user_tukin">Bendahara Tukin (Khusus Tukin)</option>
+                <option value="user_keamanan">Bendahara Keamanan (Khusus Keamanan)</option>
+                <option value="admin">Administrator (Akses Penuh)</option>
+              </select>
+            </div>
+            <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors mt-2">
+              Buat Akun
+            </button>
+          </form>
+        </div>
+
+        {/* Daftar User */}
+        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
+          <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+            <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+              <Users className="w-5 h-5 mr-2 text-emerald-600" />
+              Daftar Pengguna Terdaftar
+            </h3>
+          </div>
+          <div className="overflow-x-auto flex-1">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50 text-gray-600 text-sm border-b border-gray-100">
+                  <th className="p-4 font-semibold">Nama</th>
+                  <th className="p-4 font-semibold">Username</th>
+                  <th className="p-4 font-semibold">Hak Akses</th>
+                  <th className="p-4 font-semibold text-center">Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((u) => (
+                  <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                    <td className="p-4 text-sm text-gray-800 font-medium">{u.name}</td>
+                    <td className="p-4 text-sm text-gray-600">@{u.username}</td>
+                    <td className="p-4 text-sm">
+                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        u.role === 'admin' ? 'bg-purple-100 text-purple-700' :
+                        u.role === 'user_tukin' ? 'bg-blue-100 text-blue-700' :
+                        'bg-orange-100 text-orange-700'
+                      }`}>
+                        {u.role === 'admin' ? 'Administrator' : u.role === 'user_tukin' ? 'Tukin' : 'Keamanan'}
+                      </span>
+                    </td>
+                    <td className="p-4 text-center">
+                      {u.role !== 'admin' && ( // Mencegah admin menghapus dirinya sendiri/admin lain sementara
+                        <button 
+                          onClick={() => onDeleteUser(u.id)}
+                          className="text-red-400 hover:text-red-600 transition-colors p-2 rounded-md hover:bg-red-50"
+                          title="Hapus Pengguna"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default function App() {
+  const [currentUser, setCurrentUser] = useState(null); // null = belum login
+  const [users, setUsers] = useState(initialUsers);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [transactions, setTransactions] = useState(initialTransactions);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // State untuk form login
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    const user = users.find(u => u.username === loginUsername && u.password === loginPassword);
+    if (user) {
+      setCurrentUser(user);
+      setLoginError('');
+      setLoginUsername('');
+      setLoginPassword('');
+      setActiveTab('dashboard'); // Reset tab ke dashboard tiap login
+    } else {
+      setLoginError('Username atau password salah.');
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+  };
+
+  // Fungsi Kelola User (Khusus Admin)
+  const handleAddUser = (newUser) => {
+    setUsers(prev => [...prev, { ...newUser, id: Date.now() }]);
+  };
+
+  const handleDeleteUser = (id) => {
+    setUsers(prev => prev.filter(u => u.id !== id));
+  };
+
+  const handleAddTransaction = (newTx) => {
+    setTransactions(prev => [
+      { ...newTx, id: Date.now() },
+      ...prev
+    ]);
+  };
+
+  const handleBulkAddTransactions = (newTxs) => {
+    // Memberikan ID unik berdasar indeks karena dimasukkan di detik/milidetik yang sama
+    const txsWithIds = newTxs.map((tx, index) => ({
+      ...tx,
+      id: Date.now() + index
+    }));
+    setTransactions(prev => [...txsWithIds, ...prev]);
+  };
+
+  const handleDeleteTransaction = (id) => {
+    // Note: Alert tidak digunakan sesuai aturan, langsung menghapus untuk prototipe
+    setTransactions(transactions.filter(t => t.id !== id));
+  };
+
+  // Filter transaksi khusus dashboard berdasarkan role user yang login
+  const getDashboardTransactions = () => {
+    if (currentUser?.role === 'admin') return transactions;
+    // Jika role user_tukin, hanya kirim data tukin
+    if (currentUser?.role === 'user_tukin') return transactions.filter(t => t.category === 'tukin');
+    // Jika role user_keamanan, hanya kirim data keamanan
+    if (currentUser?.role === 'user_keamanan') return transactions.filter(t => t.category === 'keamanan');
+    return [];
+  };
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'dashboard':
+        return <Dashboard transactions={getDashboardTransactions()} role={currentUser?.role} />;
+      case 'tukin':
+        return (
+          <CategoryView
+            category="tukin"
+            title="Manajemen Kas Tukin"
+            transactions={transactions.filter(t => t.category === 'tukin')}
+            onAddTransaction={handleAddTransaction}
+            onBulkAddTransactions={handleBulkAddTransactions}
+            onDeleteTransaction={handleDeleteTransaction}
+          />
+        );
+      case 'keamanan':
+        return (
+          <CategoryView
+            category="keamanan"
+            title="Manajemen Kas Keamanan"
+            transactions={transactions.filter(t => t.category === 'keamanan')}
+            onAddTransaction={handleAddTransaction}
+            onBulkAddTransactions={handleBulkAddTransactions}
+            onDeleteTransaction={handleDeleteTransaction}
+          />
+        );
+      case 'pengaturan':
+        return (
+          <SettingsView 
+            users={users} 
+            onAddUser={handleAddUser} 
+            onDeleteUser={handleDeleteUser} 
+          />
+        );
+      default:
+        return <Dashboard transactions={getDashboardTransactions()} role={currentUser?.role} />;
+    }
+  };
+
+  // Tampilan Halaman Login jika belum ada yang masuk
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-lg max-w-md w-full border border-gray-100 animate-in fade-in zoom-in duration-300">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Lock className="w-8 h-8" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-800">SIM Bendahara</h1>
+            <p className="text-gray-500 text-sm mt-2">Pondok Pesantren Yanbu'ul Qur'an 1 Pati</p>
+          </div>
+          
+          <form onSubmit={handleLogin} className="space-y-5">
+            {loginError && (
+              <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-medium text-center border border-red-100">
+                {loginError}
+              </div>
+            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+              <input 
+                type="text" 
+                value={loginUsername} 
+                onChange={(e) => setLoginUsername(e.target.value)}
+                required
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none bg-gray-50" 
+                placeholder="Masukkan username..."
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <input 
+                type="password" 
+                value={loginPassword} 
+                onChange={(e) => setLoginPassword(e.target.value)}
+                required
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none bg-gray-50" 
+                placeholder="Masukkan password..."
+              />
+            </div>
+            <button 
+              type="submit" 
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white p-3 rounded-lg font-bold transition-colors shadow-sm"
+            >
+              Masuk
+            </button>
+          </form>
+          
+          <div className="mt-8 pt-6 border-t border-gray-100 text-center text-xs text-gray-400">
+            <p><strong>Akun Demo:</strong></p>
+            <p>Admin: <code className="bg-gray-100 px-1 rounded text-gray-600">admin</code> (Akses Penuh)</p>
+            <p>Tukin: <code className="bg-gray-100 px-1 rounded text-gray-600">tukin</code> | Keamanan: <code className="bg-gray-100 px-1 rounded text-gray-600">keamanan</code></p>
+            <p>Password semuanya: <code className="bg-gray-100 px-1 rounded text-gray-600">123</code></p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Filter Menu Navigasi berdasarkan Role
+  const allNavItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'user_tukin', 'user_keamanan'] },
+    { id: 'tukin', label: 'Kas Tukin', icon: Wallet, roles: ['admin', 'user_tukin'] },
+    { id: 'keamanan', label: 'Kas Keamanan', icon: ShieldCheck, roles: ['admin', 'user_keamanan'] },
+    { id: 'pengaturan', label: 'Pengaturan', icon: Settings, roles: ['admin'] },
+  ];
+
+  const navItems = allNavItems.filter(item => item.roles.includes(currentUser.role));
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row font-sans print:bg-white">
+      {/* Mobile Header */}
+      <div className="md:hidden bg-emerald-800 text-white p-4 flex justify-between items-center shadow-md z-20 print:hidden">
+        <h1 className="font-bold text-lg truncate">SIM Bendahara</h1>
+        <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+          {mobileMenuOpen ? <X /> : <Menu />}
+        </button>
+      </div>
+
+      {/* Sidebar */}
+      <div className={`
+        ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} 
+        md:translate-x-0 
+        fixed md:static inset-y-0 left-0 w-64 bg-emerald-900 text-emerald-50 transition-transform duration-300 ease-in-out z-10 flex flex-col
+        print:hidden
+      `}>
+        <div className="p-6 hidden md:block">
+          <h1 className="text-2xl font-bold text-white tracking-tight">SIM Bendahara</h1>
+          <p className="text-emerald-300 text-sm mt-1 truncate">Hai, {currentUser.name}</p>
+        </div>
+        
+        {/* Mobile Welcome Profile */}
+        <div className="p-4 md:hidden border-b border-emerald-800 flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-full bg-emerald-700 flex items-center justify-center font-bold text-white uppercase">
+              {currentUser.name.charAt(0)}
+            </div>
+            <div>
+              <p className="font-medium text-sm text-white truncate">{currentUser.name}</p>
+              <p className="text-xs text-emerald-300">
+                {currentUser.role === 'admin' ? 'Administrator' : currentUser.role === 'user_tukin' ? 'Bendahara Tukin' : 'Bendahara Keamanan'}
+              </p>
+            </div>
+        </div>
+
+        <nav className="mt-4 md:mt-0 px-4 space-y-2 flex-1 overflow-y-auto">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  setMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                  isActive 
+                    ? 'bg-emerald-800 text-white font-medium shadow-sm' 
+                    : 'hover:bg-emerald-800/50 text-emerald-100'
+                }`}
+              >
+                <Icon className={`w-5 h-5 ${isActive ? 'text-emerald-400' : 'text-emerald-300'}`} />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Tombol Logout di Bawah Sidebar */}
+        <div className="p-4 mt-auto border-t border-emerald-800/50">
+          <button 
+            onClick={handleLogout}
+            className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-emerald-200 hover:bg-red-500/20 hover:text-red-300 transition-colors"
+          >
+            <LogOut className="w-5 h-5" />
+            <span>Keluar Akun</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 print:bg-white print:overflow-visible flex flex-col">
+        <header className="bg-white border-b border-gray-100 px-8 py-4 hidden md:flex justify-between items-center print:hidden">
+          <h2 className="text-xl font-semibold text-gray-800 capitalize">
+            {activeTab === 'tukin' ? 'Kas Tukin' : 
+             activeTab === 'keamanan' ? 'Kas Keamanan' : 
+             activeTab === 'pengaturan' ? 'Pengaturan Sistem' : 'Dashboard Utama'}
+          </h2>
+          <div className="flex items-center space-x-3">
+            <div className="text-right">
+              <p className="text-sm font-bold text-gray-700">{currentUser.name}</p>
+              <p className="text-xs text-emerald-600 font-medium">
+                {currentUser.role === 'admin' ? 'Administrator' : currentUser.role === 'user_tukin' ? 'Bendahara Tukin' : 'Bendahara Keamanan'}
+              </p>
+            </div>
+            <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold uppercase border border-emerald-200 shadow-sm">
+              {currentUser.name.charAt(0)}
+            </div>
+          </div>
+        </header>
+        <main className="p-4 md:p-8 max-w-7xl mx-auto w-full">
+          {renderContent()}
+        </main>
+      </div>
+      
+      {/* Overlay untuk mobile sidebar */}
+      {mobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-0 md:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
