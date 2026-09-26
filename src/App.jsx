@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   LayoutDashboard, 
   Wallet, 
@@ -1095,10 +1095,32 @@ const SettingsView = ({ users, onAddUser, onDeleteUser, onUpdatePassword }) => {
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
-  const [users, setUsers] = useState(initialUsers);
+  
+  // PERBAIKAN: Ambil data user dari Penyimpanan Lokal (Local Storage)
+  const [users, setUsers] = useState(() => {
+    const savedUsers = localStorage.getItem('bendahara_users');
+    return savedUsers ? JSON.parse(savedUsers) : initialUsers;
+  });
+
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [transactions, setTransactions] = useState(initialTransactions);
+  
+  // PERBAIKAN: Ambil data transaksi dari Penyimpanan Lokal (Local Storage)
+  const [transactions, setTransactions] = useState(() => {
+    const savedTxs = localStorage.getItem('bendahara_transactions');
+    return savedTxs ? JSON.parse(savedTxs) : initialTransactions;
+  });
+  
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // PERBAIKAN: Simpan ke Penyimpanan Lokal setiap kali ada perubahan pada akun (tambah/hapus/ubah password)
+  useEffect(() => {
+    localStorage.setItem('bendahara_users', JSON.stringify(users));
+  }, [users]);
+
+  // PERBAIKAN: Simpan ke Penyimpanan Lokal setiap kali ada transaksi baru atau dihapus
+  useEffect(() => {
+    localStorage.setItem('bendahara_transactions', JSON.stringify(transactions));
+  }, [transactions]);
 
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
