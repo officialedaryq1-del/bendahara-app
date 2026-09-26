@@ -1094,12 +1094,28 @@ const SettingsView = ({ users, onAddUser, onDeleteUser, onUpdatePassword }) => {
 };
 
 export default function App() {
-  const [currentUser, setCurrentUser] = useState(null);
-  
-  // PERBAIKAN: Ambil data user dari Penyimpanan Lokal (Local Storage)
+  // PERBAIKAN: Pindahkan inisialisasi 'users' ke atas agar bisa dibaca oleh currentUser
   const [users, setUsers] = useState(() => {
     const savedUsers = localStorage.getItem('bendahara_users');
     return savedUsers ? JSON.parse(savedUsers) : initialUsers;
+  });
+
+  // FITUR BARU: Cek otomatis apakah sebelumnya ada user (selain admin) yang tersimpan dan belum logout
+  const [currentUser, setCurrentUser] = useState(() => {
+    const savedSession = localStorage.getItem('bendahara_session');
+    if (savedSession) {
+      try {
+        const sessionUser = JSON.parse(savedSession);
+        // Pastikan user masih terdaftar di sistem dan pastikan dia BUKAN admin
+        const validUser = users.find(u => u.id === sessionUser.id);
+        if (validUser && validUser.role !== 'admin') {
+          return validUser; // Otomatis Login!
+        }
+      } catch (error) {
+        return null;
+      }
+    }
+    return null;
   });
 
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -1135,6 +1151,11 @@ export default function App() {
       setLoginUsername('');
       setLoginPassword('');
       setActiveTab('dashboard'); 
+      
+      // FITUR BARU: Simpan sesi login ke HP/Browser HANYA jika bukan admin
+      if (user.role !== 'admin') {
+        localStorage.setItem('bendahara_session', JSON.stringify(user));
+      }
     } else {
       setLoginError('Username atau password salah.');
     }
@@ -1142,6 +1163,8 @@ export default function App() {
 
   const handleLogout = () => {
     setCurrentUser(null);
+    // Hapus sesi otomatis saat logout, agar berikutnya tetap dimintai password
+    localStorage.removeItem('bendahara_session');
   };
 
   const handleAddUser = (newUser) => {
