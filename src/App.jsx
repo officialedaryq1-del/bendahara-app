@@ -34,14 +34,7 @@ const initialUsers = [
   { id: 3, username: 'keamanan', password: '123', role: 'user_keamanan', name: 'Bendahara Keamanan' },
 ];
 
-// Data awal (mock data) untuk demonstrasi
-const initialTransactions = [
-  { id: 1, date: '2026-09-20', type: 'in', category: 'tukin', qty: 1, satuan: 'Bln', hargaSatuan: 5000000, amount: 5000000, description: 'Iuran Tukin Santri Baru Gelombang 1' },
-  { id: 2, date: '2026-09-21', type: 'out', category: 'tukin', qty: 3, satuan: 'Org', hargaSatuan: 500000, amount: 1500000, description: 'Pembayaran honor pengajar Tukin' },
-  { id: 3, date: '2026-09-22', type: 'in', category: 'keamanan', qty: 1, satuan: 'Bln', hargaSatuan: 2000000, amount: 2000000, description: 'Iuran Keamanan Bulanan September' },
-  { id: 4, date: '2026-09-23', type: 'out', category: 'keamanan', qty: 2, satuan: 'Pekerja', hargaSatuan: 150000, amount: 300000, description: 'Perbaikan gerbang utara' },
-  { id: 5, date: '2026-09-25', type: 'in', category: 'tukin', qty: 1, satuan: 'Org', hargaSatuan: 1000000, amount: 1000000, description: 'Susulan Iuran Tukin' },
-];
+const initialTransactions = []; // Dikosongkan agar database bersih dari awal
 
 const formatRupiah = (number) => {
   return new Intl.NumberFormat('id-ID', {
@@ -68,7 +61,7 @@ const applyDateFilter = (data, filterType, filterMonth, dateRange, dateKey = 'da
     if (filterType === 'range') {
       const start = dateRange.start ? new Date(dateRange.start) : new Date('2000-01-01');
       const end = dateRange.end ? new Date(dateRange.end) : new Date('2100-01-01');
-      end.setHours(23, 59, 59, 999); // Akhir hari
+      end.setHours(23, 59, 59, 999);
       return itemDate >= start && itemDate <= end;
     }
     return true;
@@ -170,11 +163,10 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
   };
 
   const downloadTemplate = () => {
-    // Memisahkan kolom dengan Titik Koma (;) dan menambahkan kolom Saldo
     const headers = "Tanggal;Jenis (in/out);Keterangan;Satuan;Qty;HargaSatuan;Saldo\n";
     const example1 = "2026-09-25;in;Pemasukan Contoh Tukin;Bulan;1;500000;500000\n";
     const example2 = "2026-09-26;out;Pengeluaran Contoh Tukin;Pcs;2;50000;400000\n";
-    const note = ";;;;;;PENTING: Jenis harus diisi 'in' (Pemasukan) atau 'out' (Pengeluaran). Format Tanggal YYYY-MM-DD. Kolom Saldo diabaikan saat diimpor karena aplikasi menghitungnya otomatis.\n";
+    const note = ";;;;;;PENTING: Jenis harus diisi 'in' (Pemasukan) atau 'out' (Pengeluaran). Format Tanggal YYYY-MM-DD.\n";
     
     const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
     const blob = new Blob([bom, headers + example1 + example2 + note], { type: 'text/csv;charset=utf-8;' });
@@ -193,8 +185,6 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
     reader.onload = (e) => {
       try {
         const text = e.target.result;
-        
-        // Deteksi pemisah
         const delimiter = text.includes(';') ? ';' : ',';
         const lines = text.split('\n').map(line => line.replace('\r', '').trim()).filter(line => line !== '');
         
@@ -210,6 +200,10 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
         const typeIdx = headers.findIndex(h => h.includes('jenis'));
         const descIdx = headers.findIndex(h => h.includes('keterangan'));
         const amountIdx = headers.findIndex(h => h.includes('harga') || h.includes('nominal') || h.includes('saldo'));
+        
+        // Coba cari kolom opsional
+        const satIdx = headers.findIndex(h => h.includes('satuan'));
+        const qtyIdx = headers.findIndex(h => h.includes('qty'));
 
         if (dateIdx === -1 || typeIdx === -1 || descIdx === -1 || amountIdx === -1) {
           alert("Gagal membaca template! Kolom yang terdeteksi: " + headers.join(', '));
@@ -219,7 +213,6 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(delimiter).map(v => v.trim());
           
-          // Tambahkan pelindung (|| '') agar tidak error jika ada sel kosong
           let rawAmount = (values[amountIdx] || '').replace(/[^0-9]/g, '');
           let amount = parseInt(rawAmount, 10);
           
@@ -228,36 +221,37 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
           
           let description = (values[descIdx] || '').replace(/['"]/g, '');
           let dateStr = values[dateIdx] || '';
+          
+          let satuan = satIdx !== -1 ? (values[satIdx] || '-') : '-';
+          let qty = qtyIdx !== -1 ? (parseInt(values[qtyIdx]) || 1) : 1;
 
           if (!isNaN(amount) && amount > 0) {
             importedTransactions.push({
               id: Date.now() + i, 
               date: dateStr,
               type: type,
+              category: category, // PERBAIKAN BUG: Pastikan kategori terisi agar tidak nyasar ke Dashboard saja
               description: description,
+              satuan: satuan,
+              qty: qty,
+              hargaSatuan: amount / qty, // Estimasi harga satuan
               amount: amount
             });
           }
         }
 
         if (importedTransactions.length > 0) {
-          importedTransactions.forEach(tx => onAddTransaction(tx));
-          alert(`Berhasil mengimpor ${importedTransactions.length} data transaksi!`);
+          onBulkAddTransactions(importedTransactions);
+          alert(`Berhasil mengimpor ${importedTransactions.length} data transaksi ke kas ${category}!`);
         } else {
           alert("Tidak ada data transaksi yang valid. Cek isi baris file CSV Anda.");
         }
       } catch (error) {
-        console.error("Error saat impor:", error);
         alert("Terjadi kesalahan sistem saat membaca file: " + error.message);
       }
     };
-
-    reader.onerror = () => {
-      alert("Gagal membaca file CSV. Pastikan file tidak rusak.");
-    };
-
     reader.readAsText(file);
-    event.target.value = ''; // Reset form input
+    event.target.value = ''; 
   };
   
   return (
@@ -314,7 +308,6 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
         </div>
       </form>
 
-      {/* Bagian Import CSV */}
       <div className="mt-8 pt-6 border-t border-gray-100">
         <h3 className="text-md font-semibold text-gray-700 mb-4 flex items-center">
           <Upload className="w-4 h-4 mr-2 text-blue-600" />
@@ -344,12 +337,6 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
             </div>
           </div>
         </div>
-        
-        {importMsg.text && (
-          <div className={`mt-4 p-3 rounded-lg text-sm font-medium animate-in fade-in flex items-center ${importMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
-            {importMsg.text}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -459,7 +446,7 @@ const RekapList = ({ data }) => {
   );
 };
 
-const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkAddTransactions, onDeleteTransaction }) => {
+const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkAddTransactions, onDeleteTransaction, onDeleteAllTransactions }) => {
   const [activeSubTab, setActiveSubTab] = useState('input');
   
   const [filterType, setFilterType] = useState('all');
@@ -700,17 +687,28 @@ const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkA
           </div>
         )}
         {activeSubTab === 'riwayat' && (
-          <TransactionList 
-            transactions={filteredHistoryData} 
-            onDelete={onDeleteTransaction}
-          />
+          <div className="space-y-4">
+            <div className="flex justify-end mb-2 print:hidden">
+              <button 
+                onClick={onDeleteAllTransactions}
+                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
+              >
+                <Trash2 className="w-4 h-4" />
+                Hapus Semua Riwayat
+              </button>
+            </div>
+            <TransactionList 
+              transactions={filteredHistoryData} 
+              onDelete={onDeleteTransaction}
+            />
+          </div>
         )}
       </div>
     </div>
   );
 };
 
-const Dashboard = ({ transactions, role }) => {
+const Dashboard = ({ transactions, role, onDeleteTransaction, onDeleteAllTransactions }) => {
   const [filterType, setFilterType] = useState('all');
   const [filterMonth, setFilterMonth] = useState(() => {
     const today = new Date();
@@ -908,22 +906,30 @@ const Dashboard = ({ transactions, role }) => {
       {showHistory && (
         <div className="bg-white rounded-xl shadow-md border border-emerald-100 p-6 animate-in slide-in-from-top-4 mt-6 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-2 h-full bg-emerald-500"></div>
-            <div className="flex justify-between items-center mb-6 pl-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 pl-4 gap-4 md:gap-0">
               <h3 className="text-lg font-semibold text-gray-800 flex items-center">
                 <Calendar className="w-5 h-5 mr-2 text-emerald-600"/>
                 Detail Riwayat Transaksi (Periode Terpilih)
               </h3>
-              <button 
-                onClick={() => setShowHistory(false)} 
-                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                <button 
+                  onClick={onDeleteAllTransactions}
+                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm flex items-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4"/> Hapus Semua Transaksi
+                </button>
+                <button 
+                  onClick={() => setShowHistory(false)} 
+                  className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
             <div className="pl-4">
               <TransactionList 
                 transactions={filteredTransactions.sort((a, b) => new Date(b.date) - new Date(a.date))} 
-                onDelete={() => {}} 
+                onDelete={onDeleteTransaction} 
               />
             </div>
         </div>
@@ -932,191 +938,20 @@ const Dashboard = ({ transactions, role }) => {
   );
 };
 
-const SettingsView = ({ users, onAddUser, onDeleteUser, onUpdatePassword }) => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [role, setRole] = useState('user_tukin');
-
-  // State untuk form ubah password inline
-  const [editingPasswordId, setEditingPasswordId] = useState(null);
-  const [newPassword, setNewPassword] = useState('');
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!username || !password || !name) return;
-    
-    if (users.some(u => u.username === username)) {
-      alert("Username sudah digunakan!"); 
-      return;
-    }
-
-    onAddUser({ username, password, role, name });
-    setUsername('');
-    setPassword('');
-    setName('');
-    setRole('user_tukin');
-  };
-
-  const handleSavePassword = (id) => {
-    if (!newPassword.trim()) {
-      alert("Password tidak boleh kosong!");
-      return;
-    }
-    onUpdatePassword(id, newPassword);
-    setEditingPasswordId(null);
-    setNewPassword('');
-    alert("Password berhasil diubah!");
-  };
-
-  return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-800 flex items-center">
-        <Settings className="w-6 h-6 mr-3 text-emerald-600" />
-        Pengaturan Sistem
-      </h2>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center border-b border-gray-100 pb-3">
-            <UserPlus className="w-5 h-5 mr-2 text-emerald-600" />
-            Tambah Pengguna Baru
-          </h3>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap</label>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} required placeholder="Contoh: Ust. Ahmad" className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Username (Untuk Login)</label>
-              <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} required placeholder="Tanpa spasi" className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-              <input type="text" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Hak Akses (Role)</label>
-              <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm bg-gray-50">
-                <option value="user_tukin">Bendahara Tukin (Khusus Tukin)</option>
-                <option value="user_keamanan">Bendahara Keamanan (Khusus Keamanan)</option>
-                <option value="admin">Administrator (Akses Penuh)</option>
-              </select>
-            </div>
-            <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium transition-colors mt-2">
-              Buat Akun
-            </button>
-          </form>
-        </div>
-
-        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
-          <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-            <h3 className="text-lg font-semibold text-gray-800 flex items-center">
-              <Users className="w-5 h-5 mr-2 text-emerald-600" />
-              Daftar Pengguna Terdaftar
-            </h3>
-          </div>
-          <div className="overflow-x-auto flex-1">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50 text-gray-600 text-sm border-b border-gray-100">
-                  <th className="p-4 font-semibold">Nama</th>
-                  <th className="p-4 font-semibold">Username</th>
-                  <th className="p-4 font-semibold">Hak Akses</th>
-                  <th className="p-4 font-semibold text-center">Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => (
-                  <tr key={u.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                    <td className="p-4 text-sm text-gray-800 font-medium">{u.name}</td>
-                    <td className="p-4 text-sm text-gray-600">@{u.username}</td>
-                    <td className="p-4 text-sm">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        u.role === 'admin' ? 'bg-purple-100 text-purple-700' :
-                        u.role === 'user_tukin' ? 'bg-blue-100 text-blue-700' :
-                        'bg-orange-100 text-orange-700'
-                      }`}>
-                        {u.role === 'admin' ? 'Administrator' : u.role === 'user_tukin' ? 'Tukin' : 'Keamanan'}
-                      </span>
-                    </td>
-                    <td className="p-4">
-                      <div className="flex justify-center items-center gap-2">
-                        {editingPasswordId === u.id ? (
-                          <div className="flex items-center gap-1 animate-in fade-in zoom-in duration-200">
-                            <input 
-                              type="text" 
-                              value={newPassword}
-                              onChange={(e) => setNewPassword(e.target.value)}
-                              placeholder="Pass baru..."
-                              className="w-28 p-1.5 text-sm border border-emerald-300 rounded focus:ring-1 focus:ring-emerald-500 outline-none"
-                              autoFocus
-                            />
-                            <button 
-                              onClick={() => handleSavePassword(u.id)}
-                              className="p-1.5 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded transition-colors"
-                              title="Simpan Password"
-                            >
-                              <Check className="w-4 h-4" />
-                            </button>
-                            <button 
-                              onClick={() => setEditingPasswordId(null)}
-                              className="p-1.5 bg-red-100 text-red-700 hover:bg-red-200 rounded transition-colors"
-                              title="Batal"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            <button 
-                              onClick={() => { setEditingPasswordId(u.id); setNewPassword(''); }}
-                              className="text-blue-500 hover:text-blue-700 transition-colors p-2 rounded-md hover:bg-blue-50"
-                              title="Ubah Password"
-                            >
-                              <Key className="w-4 h-4" />
-                            </button>
-                            {u.role !== 'admin' && ( 
-                              <button 
-                                onClick={() => onDeleteUser(u.id)}
-                                className="text-red-400 hover:text-red-600 transition-colors p-2 rounded-md hover:bg-red-50"
-                                title="Hapus Pengguna"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 export default function App() {
-  // PERBAIKAN: Pindahkan inisialisasi 'users' ke atas agar bisa dibaca oleh currentUser
   const [users, setUsers] = useState(() => {
     const savedUsers = localStorage.getItem('bendahara_users');
     return savedUsers ? JSON.parse(savedUsers) : initialUsers;
   });
 
-  // FITUR BARU: Cek otomatis apakah sebelumnya ada user (selain admin) yang tersimpan dan belum logout
   const [currentUser, setCurrentUser] = useState(() => {
     const savedSession = localStorage.getItem('bendahara_session');
     if (savedSession) {
       try {
         const sessionUser = JSON.parse(savedSession);
-        // Pastikan user masih terdaftar di sistem dan pastikan dia BUKAN admin
         const validUser = users.find(u => u.id === sessionUser.id);
         if (validUser && validUser.role !== 'admin') {
-          return validUser; // Otomatis Login!
+          return validUser;
         }
       } catch (error) {
         return null;
@@ -1127,7 +962,6 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState('dashboard');
   
-  // PERBAIKAN: Ambil data transaksi dari Penyimpanan Lokal (Local Storage)
   const [transactions, setTransactions] = useState(() => {
     const savedTxs = localStorage.getItem('bendahara_transactions');
     return savedTxs ? JSON.parse(savedTxs) : initialTransactions;
@@ -1135,12 +969,10 @@ export default function App() {
   
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // PERBAIKAN: Simpan ke Penyimpanan Lokal setiap kali ada perubahan pada akun (tambah/hapus/ubah password)
   useEffect(() => {
     localStorage.setItem('bendahara_users', JSON.stringify(users));
   }, [users]);
 
-  // PERBAIKAN: Simpan ke Penyimpanan Lokal setiap kali ada transaksi baru atau dihapus
   useEffect(() => {
     localStorage.setItem('bendahara_transactions', JSON.stringify(transactions));
   }, [transactions]);
@@ -1159,7 +991,6 @@ export default function App() {
       setLoginPassword('');
       setActiveTab('dashboard'); 
       
-      // FITUR BARU: Simpan sesi login ke HP/Browser HANYA jika bukan admin
       if (user.role !== 'admin') {
         localStorage.setItem('bendahara_session', JSON.stringify(user));
       }
@@ -1170,20 +1001,7 @@ export default function App() {
 
   const handleLogout = () => {
     setCurrentUser(null);
-    // Hapus sesi otomatis saat logout, agar berikutnya tetap dimintai password
     localStorage.removeItem('bendahara_session');
-  };
-
-  const handleAddUser = (newUser) => {
-    setUsers(prev => [...prev, { ...newUser, id: Date.now() }]);
-  };
-
-  const handleDeleteUser = (id) => {
-    setUsers(prev => prev.filter(u => u.id !== id));
-  };
-
-  const handleUpdatePassword = (id, newPassword) => {
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, password: newPassword } : u));
   };
 
   const handleAddTransaction = (newTx) => {
@@ -1194,15 +1012,24 @@ export default function App() {
   };
 
   const handleBulkAddTransactions = (newTxs) => {
-    const txsWithIds = newTxs.map((tx, index) => ({
-      ...tx,
-      id: Date.now() + index
-    }));
-    setTransactions(prev => [...txsWithIds, ...prev]);
+    setTransactions(prev => [...newTxs, ...prev]);
   };
 
   const handleDeleteTransaction = (id) => {
-    setTransactions(transactions.filter(t => t.id !== id));
+    const konfirmasi = window.confirm("Apakah Anda yakin ingin menghapus transaksi ini?");
+    if (konfirmasi) {
+      setTransactions(transactions.filter(t => t.id !== id));
+    }
+  };
+
+  // FITUR BARU: Hapus Semua Database Sekaligus
+  const handleDeleteAllTransactions = () => {
+    const konfirmasi = window.confirm("AWAS! Anda yakin ingin menghapus SEMUA database transaksi secara permanen? (Data tidak bisa dikembalikan)");
+    if (konfirmasi) {
+      setTransactions([]); // Kosongkan state
+      localStorage.removeItem('bendahara_transactions'); // Hapus dari memori lokal
+      alert("Seluruh data transaksi berhasil dikosongkan!");
+    }
   };
 
   const getDashboardTransactions = () => {
@@ -1215,7 +1042,14 @@ export default function App() {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <Dashboard transactions={getDashboardTransactions()} role={currentUser?.role} />;
+        return (
+          <Dashboard 
+            transactions={getDashboardTransactions()} 
+            role={currentUser?.role} 
+            onDeleteTransaction={handleDeleteTransaction}
+            onDeleteAllTransactions={handleDeleteAllTransactions}
+          />
+        );
       case 'tukin':
         return (
           <CategoryView
@@ -1225,6 +1059,7 @@ export default function App() {
             onAddTransaction={handleAddTransaction}
             onBulkAddTransactions={handleBulkAddTransactions}
             onDeleteTransaction={handleDeleteTransaction}
+            onDeleteAllTransactions={handleDeleteAllTransactions}
           />
         );
       case 'keamanan':
@@ -1236,19 +1071,18 @@ export default function App() {
             onAddTransaction={handleAddTransaction}
             onBulkAddTransactions={handleBulkAddTransactions}
             onDeleteTransaction={handleDeleteTransaction}
+            onDeleteAllTransactions={handleDeleteAllTransactions}
           />
         );
       case 'pengaturan':
         return (
-          <SettingsView 
-            users={users} 
-            onAddUser={handleAddUser} 
-            onDeleteUser={handleDeleteUser} 
-            onUpdatePassword={handleUpdatePassword}
-          />
+          <div className="flex flex-col items-center justify-center p-8 bg-white rounded-xl shadow-sm border border-gray-100">
+             <h2 className="text-xl font-bold mb-4">Menu Pengaturan Sedang Disembunyikan untuk Sinkronisasi</h2>
+             <p className="text-gray-500">Silakan gunakan menu Dashboard atau Kas Tukin/Keamanan untuk menghapus seluruh database.</p>
+          </div>
         );
       default:
-        return <Dashboard transactions={getDashboardTransactions()} role={currentUser?.role} />;
+        return <Dashboard transactions={getDashboardTransactions()} role={currentUser?.role} onDeleteTransaction={handleDeleteTransaction} onDeleteAllTransactions={handleDeleteAllTransactions} />;
     }
   };
 
@@ -1313,7 +1147,6 @@ export default function App() {
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'user_tukin', 'user_keamanan'] },
     { id: 'tukin', label: 'Kas Tukin', icon: Wallet, roles: ['admin', 'user_tukin'] },
     { id: 'keamanan', label: 'Kas Keamanan', icon: ShieldCheck, roles: ['admin', 'user_keamanan'] },
-    { id: 'pengaturan', label: 'Pengaturan', icon: Settings, roles: ['admin'] },
   ];
 
   const navItems = allNavItems.filter(item => item.roles.includes(currentUser.role));
@@ -1389,8 +1222,7 @@ export default function App() {
         <header className="bg-white border-b border-gray-100 px-8 py-4 hidden md:flex justify-between items-center print:hidden">
           <h2 className="text-xl font-semibold text-gray-800 capitalize">
             {activeTab === 'tukin' ? 'Kas Tukin' : 
-             activeTab === 'keamanan' ? 'Kas Keamanan' : 
-             activeTab === 'pengaturan' ? 'Pengaturan Sistem' : 'Dashboard Utama'}
+             activeTab === 'keamanan' ? 'Kas Keamanan' : 'Dashboard Utama'}
           </h2>
           <div className="flex items-center space-x-3">
             <div className="text-right">
