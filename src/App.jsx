@@ -32,7 +32,7 @@ import { createClient } from '@supabase/supabase-js';
 // =====================================================================
 // MASUKKAN KREDENSIAL SUPABASE ANDA DI SINI (DARI PROJECT SETTINGS > API)
 // =====================================================================
-const supabaseUrl = 'https://aqrdvlcoqghpldgybqmn.supabase.co/rest/v1/';
+const supabaseUrl = 'https://aqrdvlcoqghpldgybqmn.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFxcmR2bGNvcWdocGxkZ3licW1uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA0MjU5OTUsImV4cCI6MjEwNjAwMTk5NX0.ujAQI5H--Pd_5ttVipxHEMdpzjzBNBAPvEIOHlgFRtM';
 const supabase = createClient(supabaseUrl, supabaseKey);
 // =====================================================================
