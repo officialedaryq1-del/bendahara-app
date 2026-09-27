@@ -24,7 +24,7 @@ import {
   UserPlus,
   Key,
   Check,
-  Edit // TAMBAHAN: Ikon Edit
+  Edit
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
@@ -35,7 +35,7 @@ const initialUsers = [
   { id: 3, username: 'keamanan', password: '123', role: 'user_keamanan', name: 'Bendahara Keamanan' },
 ];
 
-const initialTransactions = []; // Dikosongkan agar database bersih dari awal
+const initialTransactions = []; 
 
 const formatRupiah = (number) => {
   return new Intl.NumberFormat('id-ID', {
@@ -61,7 +61,7 @@ const applyDateFilter = (data, filterType, filterMonth, dateRange, dateKey = 'da
   if (filterType === 'all') return data;
   return data.filter(item => {
     const itemDate = new Date(item[dateKey]);
-    if (isNaN(itemDate.getTime())) return true; // Biarkan data invalid date tetap muncul agar bisa diedit
+    if (isNaN(itemDate.getTime())) return true; 
     
     if (filterType === 'month') {
       if (!filterMonth) return true;
@@ -125,9 +125,7 @@ const DateFilter = ({ filterType, setFilterType, filterMonth, setFilterMonth, da
   );
 };
 
-// TAMBAHAN: Komponen Modal untuk Edit Transaksi
 const EditTransactionModal = ({ tx, onClose, onSave }) => {
-  // Jika tanggalnya "Invalid Date", set kosong agar user bisa memilih tanggal baru dengan mudah
   const [date, setDate] = useState(() => {
     if (!tx.date || tx.date === 'Invalid Date') return '';
     try {
@@ -225,7 +223,6 @@ const EditTransactionModal = ({ tx, onClose, onSave }) => {
   );
 };
 
-
 const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) => {
   const [type, setType] = useState('in');
   const [description, setDescription] = useState('');
@@ -234,7 +231,6 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
   const [qty, setQty] = useState(1);
   const [hargaSatuan, setHargaSatuan] = useState('');
   const [amount, setAmount] = useState(''); 
-  const [importMsg, setImportMsg] = useState({ text: '', type: '' });
 
   const handleQtyChange = (e) => {
     const val = e.target.value;
@@ -273,7 +269,6 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
     setDescription('');
   };
 
-  // PERBARUAN: Template CSV Baru dengan kolom Total
   const downloadTemplate = () => {
     const headers = "Tanggal;Jenis (in/out);Keterangan;Satuan;Qty;HargaSatuan;Total\n";
     const example1 = "2026-09-25;in;Pemasukan Contoh Tukin;Bulan;1;500000;500000\n";
@@ -314,7 +309,6 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
         const satIdx = headers.findIndex(h => h.includes('satuan'));
         const qtyIdx = headers.findIndex(h => h === 'qty' || h.includes('kuantitas'));
         const hargaIdx = headers.findIndex(h => h.includes('harga'));
-        // Mencari kolom total atau saldo
         const totalIdx = headers.findIndex(h => h.includes('total') || h.includes('jumlah') || h.includes('saldo'));
 
         if (dateIdx === -1 || typeIdx === -1 || descIdx === -1 || (hargaIdx === -1 && totalIdx === -1)) {
@@ -324,7 +318,7 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
 
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(delimiter).map(v => v.trim());
-          if (values.length < 3) continue; // Lewati baris kosong atau catatan bawah
+          if (values.length < 3) continue; 
           
           let dateStr = values[dateIdx] || '';
           let typeStr = (values[typeIdx] || '').replace(/['"]/g, '').toLowerCase();
@@ -340,14 +334,11 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
           let hargaSatuan = parseInt(rawHarga, 10);
           let totalAmount = parseInt(rawTotal, 10);
 
-          // LOGIKA CERDAS HITUNG TOTAL / HARGA SATUAN
           if (!isNaN(totalAmount) && totalAmount > 0) {
-            // Jika Total diisi tapi harga satuan kosong
             if (isNaN(hargaSatuan) || hargaSatuan === 0) {
               hargaSatuan = totalAmount / qty;
             }
           } else if (!isNaN(hargaSatuan) && hargaSatuan > 0) {
-            // Jika harga satuan diisi tapi total kosong
             totalAmount = hargaSatuan * qty;
           }
 
@@ -469,16 +460,15 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
 };
 
 const TransactionList = ({ transactions, onDelete, onEdit }) => {
-  const [editingTx, setEditingTx] = useState(null); // State untuk melacak transaksi yang sedang diedit
+  const [editingTx, setEditingTx] = useState(null); 
 
   const handleSaveEdit = (updatedTx) => {
     onEdit(updatedTx);
-    setEditingTx(null); // Tutup modal setelah simpan
+    setEditingTx(null); 
   };
 
   return (
     <>
-      {/* Tampilkan Modal Jika Ada Data Yang Diedit */}
       {editingTx && (
         <EditTransactionModal 
           tx={editingTx} 
@@ -526,7 +516,6 @@ const TransactionList = ({ transactions, onDelete, onEdit }) => {
                       {t.type === 'out' ? formatRupiah(t.amount) : '-'}
                     </td>
                     <td className="p-4 text-center whitespace-nowrap">
-                      {/* Tombol Edit */}
                       <button 
                         onClick={() => setEditingTx(t)}
                         className="text-blue-500 hover:text-blue-700 transition-colors p-2 rounded-md hover:bg-blue-50"
@@ -534,7 +523,6 @@ const TransactionList = ({ transactions, onDelete, onEdit }) => {
                       >
                         <Edit className="w-4 h-4" />
                       </button>
-                      {/* Tombol Hapus */}
                       <button 
                         onClick={() => onDelete(t.id)}
                         className="text-red-400 hover:text-red-600 transition-colors p-2 rounded-md hover:bg-red-50"
@@ -603,7 +591,7 @@ const RekapList = ({ data }) => {
   );
 };
 
-const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkAddTransactions, onDeleteTransaction, onDeleteAllTransactions, onEditTransaction }) => {
+const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkAddTransactions, onDeleteTransaction, onEditTransaction }) => {
   const [activeSubTab, setActiveSubTab] = useState('input');
   
   const [filterType, setFilterType] = useState('all');
@@ -626,7 +614,6 @@ const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkA
   };
 
   const rekapData = useMemo(() => {
-    // Abaikan invalid date saat menghitung saldo
     const validTxs = transactions.filter(t => !isNaN(new Date(t.date).getTime()));
     const sorted = [...validTxs].sort((a, b) => new Date(a.date) - new Date(b.date));
     let currentSaldo = 0;
@@ -642,7 +629,6 @@ const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkA
   }, [rekapData, filterType, filterMonth, dateRange]);
 
   const filteredHistoryData = useMemo(() => {
-    // Biarkan Invalid date di atas agar gampang dicari & diedit
     const reversed = [...transactions].sort((a,b) => {
       const dA = new Date(a.date).getTime();
       const dB = new Date(b.date).getTime();
@@ -854,15 +840,6 @@ const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkA
         )}
         {activeSubTab === 'riwayat' && (
           <div className="space-y-4">
-            <div className="flex justify-end mb-2 print:hidden">
-              <button 
-                onClick={onDeleteAllTransactions}
-                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
-              >
-                <Trash2 className="w-4 h-4" />
-                Hapus Semua Riwayat
-              </button>
-            </div>
             <TransactionList 
               transactions={filteredHistoryData} 
               onDelete={onDeleteTransaction}
@@ -875,7 +852,7 @@ const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkA
   );
 };
 
-const Dashboard = ({ transactions, role, onDeleteTransaction, onDeleteAllTransactions, onEditTransaction }) => {
+const Dashboard = ({ transactions, role, onDeleteTransaction, onEditTransaction }) => {
   const [filterType, setFilterType] = useState('all');
   const [filterMonth, setFilterMonth] = useState(() => {
     const today = new Date();
@@ -894,7 +871,6 @@ const Dashboard = ({ transactions, role, onDeleteTransaction, onDeleteAllTransac
     let absoluteKeamananIn = 0, absoluteKeamananOut = 0;
 
     transactions.forEach(t => {
-      // Abaikan data yang tanggalnya invalid agar grafik tidak rusak
       if(isNaN(new Date(t.date).getTime())) return; 
 
       if (t.type === 'in') {
@@ -928,7 +904,7 @@ const Dashboard = ({ transactions, role, onDeleteTransaction, onDeleteAllTransac
     const grouped = {};
     filteredTransactions.forEach(t => {
       const dateStr = t.date;
-      if(isNaN(new Date(dateStr).getTime())) return; // Abaikan invalid date di grafik
+      if(isNaN(new Date(dateStr).getTime())) return; 
       
       if (!grouped[dateStr]) grouped[dateStr] = { date: dateStr, label: formatDate(dateStr), Pemasukan: 0, Pengeluaran: 0 };
       if (t.type === 'in') grouped[dateStr].Pemasukan += t.amount;
@@ -1086,12 +1062,6 @@ const Dashboard = ({ transactions, role, onDeleteTransaction, onDeleteAllTransac
               </h3>
               <div className="flex items-center gap-3 w-full md:w-auto justify-end">
                 <button 
-                  onClick={onDeleteAllTransactions}
-                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm flex items-center gap-2"
-                >
-                  <Trash2 className="w-4 h-4"/> Hapus Semua Transaksi
-                </button>
-                <button 
                   onClick={() => setShowHistory(false)} 
                   className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
                 >
@@ -1202,18 +1172,8 @@ export default function App() {
     }
   };
 
-  // TAMBAHAN: Fungsi Edit Transaksi
   const handleEditTransaction = (updatedTx) => {
     setTransactions(prev => prev.map(t => t.id === updatedTx.id ? updatedTx : t));
-  };
-
-  const handleDeleteAllTransactions = () => {
-    const konfirmasi = window.confirm("AWAS! Anda yakin ingin menghapus SEMUA database transaksi secara permanen? (Data tidak bisa dikembalikan)");
-    if (konfirmasi) {
-      setTransactions([]); 
-      localStorage.removeItem('bendahara_transactions'); 
-      alert("Seluruh data transaksi berhasil dikosongkan!");
-    }
   };
 
   const getDashboardTransactions = () => {
@@ -1231,8 +1191,7 @@ export default function App() {
             transactions={getDashboardTransactions()} 
             role={currentUser?.role} 
             onDeleteTransaction={handleDeleteTransaction}
-            onDeleteAllTransactions={handleDeleteAllTransactions}
-            onEditTransaction={handleEditTransaction} // Teruskan prop
+            onEditTransaction={handleEditTransaction} 
           />
         );
       case 'tukin':
@@ -1244,8 +1203,7 @@ export default function App() {
             onAddTransaction={handleAddTransaction}
             onBulkAddTransactions={handleBulkAddTransactions}
             onDeleteTransaction={handleDeleteTransaction}
-            onDeleteAllTransactions={handleDeleteAllTransactions}
-            onEditTransaction={handleEditTransaction} // Teruskan prop
+            onEditTransaction={handleEditTransaction} 
           />
         );
       case 'keamanan':
@@ -1257,19 +1215,18 @@ export default function App() {
             onAddTransaction={handleAddTransaction}
             onBulkAddTransactions={handleBulkAddTransactions}
             onDeleteTransaction={handleDeleteTransaction}
-            onDeleteAllTransactions={handleDeleteAllTransactions}
-            onEditTransaction={handleEditTransaction} // Teruskan prop
+            onEditTransaction={handleEditTransaction} 
           />
         );
       case 'pengaturan':
         return (
           <div className="flex flex-col items-center justify-center p-8 bg-white rounded-xl shadow-sm border border-gray-100">
-             <h2 className="text-xl font-bold mb-4">Menu Pengaturan Sedang Disembunyikan untuk Sinkronisasi</h2>
-             <p className="text-gray-500">Silakan gunakan menu Dashboard atau Kas Tukin/Keamanan untuk menghapus seluruh database.</p>
+             <h2 className="text-xl font-bold mb-4">Menu Pengaturan Sedang Disembunyikan</h2>
+             <p className="text-gray-500">Anda dapat mengembangkan bagian ini kembali di waktu yang akan datang.</p>
           </div>
         );
       default:
-        return <Dashboard transactions={getDashboardTransactions()} role={currentUser?.role} onDeleteTransaction={handleDeleteTransaction} onDeleteAllTransactions={handleDeleteAllTransactions} onEditTransaction={handleEditTransaction} />;
+        return <Dashboard transactions={getDashboardTransactions()} role={currentUser?.role} onDeleteTransaction={handleDeleteTransaction} onEditTransaction={handleEditTransaction} />;
     }
   };
 
