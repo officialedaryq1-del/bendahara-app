@@ -794,7 +794,7 @@ export default function App() {
         <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>{mobileMenuOpen ? <X /> : <Menu />}</button>
       </div>
 
-      <div className={`${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 fixed md:static inset-y-0 left-0 w-64 bg-emerald-900 text-emerald-50 transition-transform duration-300 ease-in-out z-10 flex flex-col print:hidden`}>
+      <div className={`${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 fixed md:static inset-y-0 left-0 w-full md:w-64 bg-emerald-900 text-emerald-50 transition-transform duration-300 ease-in-out z-10 flex flex-col print:hidden`}>
         <div className="p-6 hidden md:block"><h1 className="text-2xl font-bold text-white tracking-tight">SIM Bendahara</h1><p className="text-emerald-300 text-sm mt-1 truncate">Hai, {currentUser.name}</p></div>
         
         <div className="p-4 md:hidden border-b border-emerald-800 flex items-center space-x-3">
