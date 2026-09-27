@@ -23,7 +23,8 @@ import {
   Lock,
   UserPlus,
   Key,
-  Check
+  Check,
+  Edit // TAMBAHAN: Ikon Edit
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
@@ -45,14 +46,23 @@ const formatRupiah = (number) => {
 };
 
 const formatDate = (dateString) => {
-  const options = { year: 'numeric', month: 'long', day: 'numeric' };
-  return new Date(dateString).toLocaleDateString('id-ID', options);
+  if (!dateString || dateString === 'Invalid Date') return 'Tanggal Tidak Valid';
+  try {
+    const d = new Date(dateString);
+    if (isNaN(d.getTime())) return 'Tanggal Tidak Valid';
+    const options = { year: 'numeric', month: 'long', day: 'numeric' };
+    return d.toLocaleDateString('id-ID', options);
+  } catch {
+    return 'Tanggal Tidak Valid';
+  }
 };
 
 const applyDateFilter = (data, filterType, filterMonth, dateRange, dateKey = 'date') => {
   if (filterType === 'all') return data;
   return data.filter(item => {
     const itemDate = new Date(item[dateKey]);
+    if (isNaN(itemDate.getTime())) return true; // Biarkan data invalid date tetap muncul agar bisa diedit
+    
     if (filterType === 'month') {
       if (!filterMonth) return true;
       const itemMonth = `${itemDate.getFullYear()}-${String(itemDate.getMonth() + 1).padStart(2, '0')}`;
@@ -114,6 +124,107 @@ const DateFilter = ({ filterType, setFilterType, filterMonth, setFilterMonth, da
     </div>
   );
 };
+
+// TAMBAHAN: Komponen Modal untuk Edit Transaksi
+const EditTransactionModal = ({ tx, onClose, onSave }) => {
+  // Jika tanggalnya "Invalid Date", set kosong agar user bisa memilih tanggal baru dengan mudah
+  const [date, setDate] = useState(() => {
+    if (!tx.date || tx.date === 'Invalid Date') return '';
+    try {
+      const d = new Date(tx.date);
+      if (isNaN(d.getTime())) return '';
+      return d.toISOString().split('T')[0];
+    } catch {
+      return '';
+    }
+  });
+  
+  const [type, setType] = useState(tx.type || 'in');
+  const [description, setDescription] = useState(tx.description || '');
+  const [satuan, setSatuan] = useState(tx.satuan || '');
+  const [qty, setQty] = useState(tx.qty || 1);
+  const [hargaSatuan, setHargaSatuan] = useState(tx.hargaSatuan || 0);
+  const [amount, setAmount] = useState(tx.amount || 0);
+
+  const handleQtyChange = (e) => {
+    const val = e.target.value;
+    setQty(val);
+    setAmount((parseFloat(val) || 0) * (parseFloat(hargaSatuan) || 0));
+  };
+
+  const handleHargaChange = (e) => {
+    const val = e.target.value;
+    setHargaSatuan(val);
+    setAmount((parseFloat(qty) || 0) * (parseFloat(val) || 0));
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSave({
+      ...tx,
+      date,
+      type,
+      description,
+      satuan,
+      qty: parseFloat(qty) || 1,
+      hargaSatuan: parseFloat(hargaSatuan) || 0,
+      amount: parseFloat(amount) || 0
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 animate-in fade-in">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-bold text-gray-800">Edit Transaksi</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-red-500"><X className="w-5 h-5"/></button>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal</label>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Jenis Transaksi</label>
+            <select value={type} onChange={(e) => setType(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm">
+              <option value="in">Pemasukan (+)</option>
+              <option value="out">Pengeluaran (-)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Keterangan</label>
+            <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} required className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Satuan</label>
+              <input type="text" value={satuan} onChange={(e) => setSatuan(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Qty</label>
+              <input type="number" value={qty} onChange={handleQtyChange} min="0.01" step="0.01" required className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Harga / Satuan (Rp)</label>
+            <input type="number" value={hargaSatuan} onChange={handleHargaChange} required className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Total (Rp)</label>
+            <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} required className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-emerald-700 bg-emerald-50" />
+          </div>
+          
+          <div className="flex justify-end gap-3 mt-6">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors">Batal</button>
+            <button type="submit" className="px-4 py-2 text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg font-medium transition-colors">Simpan Perubahan</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 
 const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) => {
   const [type, setType] = useState('in');
@@ -201,7 +312,6 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
         const descIdx = headers.findIndex(h => h.includes('keterangan'));
         const amountIdx = headers.findIndex(h => h.includes('harga') || h.includes('nominal') || h.includes('saldo'));
         
-        // Coba cari kolom opsional
         const satIdx = headers.findIndex(h => h.includes('satuan'));
         const qtyIdx = headers.findIndex(h => h.includes('qty'));
 
@@ -230,11 +340,11 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
               id: Date.now() + i, 
               date: dateStr,
               type: type,
-              category: category, // PERBAIKAN BUG: Pastikan kategori terisi agar tidak nyasar ke Dashboard saja
+              category: category,
               description: description,
               satuan: satuan,
               qty: qty,
-              hargaSatuan: amount / qty, // Estimasi harga satuan
+              hargaSatuan: amount / qty, 
               amount: amount
             });
           }
@@ -342,58 +452,89 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
   );
 };
 
-const TransactionList = ({ transactions, onDelete }) => {
+const TransactionList = ({ transactions, onDelete, onEdit }) => {
+  const [editingTx, setEditingTx] = useState(null); // State untuk melacak transaksi yang sedang diedit
+
+  const handleSaveEdit = (updatedTx) => {
+    onEdit(updatedTx);
+    setEditingTx(null); // Tutup modal setelah simpan
+  };
+
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-100 text-gray-600 text-sm">
-              <th className="p-4 font-semibold">Tanggal</th>
-              <th className="p-4 font-semibold">Keterangan</th>
-              <th className="p-4 font-semibold">Satuan</th>
-              <th className="p-4 font-semibold text-center">Qty</th>
-              <th className="p-4 font-semibold text-right">Harga/Sat</th>
-              <th className="p-4 font-semibold text-right">Pemasukan</th>
-              <th className="p-4 font-semibold text-right">Pengeluaran</th>
-              <th className="p-4 font-semibold text-center">Aksi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {transactions.length === 0 ? (
-              <tr>
-                <td colSpan="8" className="p-8 text-center text-gray-400">Belum ada data transaksi.</td>
+    <>
+      {/* Tampilkan Modal Jika Ada Data Yang Diedit */}
+      {editingTx && (
+        <EditTransactionModal 
+          tx={editingTx} 
+          onClose={() => setEditingTx(null)} 
+          onSave={handleSaveEdit} 
+        />
+      )}
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-50 border-b border-gray-100 text-gray-600 text-sm">
+                <th className="p-4 font-semibold">Tanggal</th>
+                <th className="p-4 font-semibold">Keterangan</th>
+                <th className="p-4 font-semibold">Satuan</th>
+                <th className="p-4 font-semibold text-center">Qty</th>
+                <th className="p-4 font-semibold text-right">Harga/Sat</th>
+                <th className="p-4 font-semibold text-right">Pemasukan</th>
+                <th className="p-4 font-semibold text-right">Pengeluaran</th>
+                <th className="p-4 font-semibold text-center">Aksi</th>
               </tr>
-            ) : (
-              transactions.map((t) => (
-                <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                  <td className="p-4 text-sm text-gray-600 whitespace-nowrap">{formatDate(t.date)}</td>
-                  <td className="p-4 text-sm font-medium text-gray-800">{t.description}</td>
-                  <td className="p-4 text-sm text-gray-600">{t.satuan || '-'}</td>
-                  <td className="p-4 text-sm text-gray-600 text-center">{t.qty || '-'}</td>
-                  <td className="p-4 text-sm text-right text-gray-600 whitespace-nowrap">{t.hargaSatuan ? formatRupiah(t.hargaSatuan) : '-'}</td>
-                  <td className="p-4 text-sm text-right text-emerald-600 font-semibold whitespace-nowrap">
-                    {t.type === 'in' ? formatRupiah(t.amount) : '-'}
-                  </td>
-                  <td className="p-4 text-sm text-right text-red-500 font-semibold whitespace-nowrap">
-                    {t.type === 'out' ? formatRupiah(t.amount) : '-'}
-                  </td>
-                  <td className="p-4 text-center">
-                    <button 
-                      onClick={() => onDelete(t.id)}
-                      className="text-red-400 hover:text-red-600 transition-colors p-2 rounded-md hover:bg-red-50"
-                      title="Hapus"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
+            </thead>
+            <tbody>
+              {transactions.length === 0 ? (
+                <tr>
+                  <td colSpan="8" className="p-8 text-center text-gray-400">Belum ada data transaksi.</td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                transactions.map((t) => {
+                  const isInvalidDate = !t.date || t.date === 'Invalid Date' || isNaN(new Date(t.date).getTime());
+                  return (
+                  <tr key={t.id} className={`border-b border-gray-50 hover:bg-gray-50/50 transition-colors ${isInvalidDate ? 'bg-red-50/30' : ''}`}>
+                    <td className={`p-4 text-sm whitespace-nowrap ${isInvalidDate ? 'text-red-500 font-bold' : 'text-gray-600'}`}>
+                      {formatDate(t.date)}
+                    </td>
+                    <td className="p-4 text-sm font-medium text-gray-800">{t.description}</td>
+                    <td className="p-4 text-sm text-gray-600">{t.satuan || '-'}</td>
+                    <td className="p-4 text-sm text-gray-600 text-center">{t.qty || '-'}</td>
+                    <td className="p-4 text-sm text-right text-gray-600 whitespace-nowrap">{t.hargaSatuan ? formatRupiah(t.hargaSatuan) : '-'}</td>
+                    <td className="p-4 text-sm text-right text-emerald-600 font-semibold whitespace-nowrap">
+                      {t.type === 'in' ? formatRupiah(t.amount) : '-'}
+                    </td>
+                    <td className="p-4 text-sm text-right text-red-500 font-semibold whitespace-nowrap">
+                      {t.type === 'out' ? formatRupiah(t.amount) : '-'}
+                    </td>
+                    <td className="p-4 text-center whitespace-nowrap">
+                      {/* Tombol Edit */}
+                      <button 
+                        onClick={() => setEditingTx(t)}
+                        className="text-blue-500 hover:text-blue-700 transition-colors p-2 rounded-md hover:bg-blue-50"
+                        title="Edit Data"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                      {/* Tombol Hapus */}
+                      <button 
+                        onClick={() => onDelete(t.id)}
+                        className="text-red-400 hover:text-red-600 transition-colors p-2 rounded-md hover:bg-red-50"
+                        title="Hapus"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                )})
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 
@@ -446,7 +587,7 @@ const RekapList = ({ data }) => {
   );
 };
 
-const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkAddTransactions, onDeleteTransaction, onDeleteAllTransactions }) => {
+const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkAddTransactions, onDeleteTransaction, onDeleteAllTransactions, onEditTransaction }) => {
   const [activeSubTab, setActiveSubTab] = useState('input');
   
   const [filterType, setFilterType] = useState('all');
@@ -469,7 +610,9 @@ const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkA
   };
 
   const rekapData = useMemo(() => {
-    const sorted = [...transactions].sort((a, b) => new Date(a.date) - new Date(b.date));
+    // Abaikan invalid date saat menghitung saldo
+    const validTxs = transactions.filter(t => !isNaN(new Date(t.date).getTime()));
+    const sorted = [...validTxs].sort((a, b) => new Date(a.date) - new Date(b.date));
     let currentSaldo = 0;
     return sorted.map(t => {
       if (t.type === 'in') currentSaldo += t.amount;
@@ -483,7 +626,14 @@ const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkA
   }, [rekapData, filterType, filterMonth, dateRange]);
 
   const filteredHistoryData = useMemo(() => {
-    const reversed = [...transactions].sort((a,b) => new Date(b.date) - new Date(a.date));
+    // Biarkan Invalid date di atas agar gampang dicari & diedit
+    const reversed = [...transactions].sort((a,b) => {
+      const dA = new Date(a.date).getTime();
+      const dB = new Date(b.date).getTime();
+      if (isNaN(dA) && !isNaN(dB)) return -1;
+      if (!isNaN(dA) && isNaN(dB)) return 1;
+      return dB - dA;
+    });
     return applyDateFilter(reversed, filterType, filterMonth, dateRange);
   }, [transactions, filterType, filterMonth, dateRange]);
 
@@ -700,6 +850,7 @@ const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkA
             <TransactionList 
               transactions={filteredHistoryData} 
               onDelete={onDeleteTransaction}
+              onEdit={onEditTransaction}
             />
           </div>
         )}
@@ -708,7 +859,7 @@ const CategoryView = ({ category, title, transactions, onAddTransaction, onBulkA
   );
 };
 
-const Dashboard = ({ transactions, role, onDeleteTransaction, onDeleteAllTransactions }) => {
+const Dashboard = ({ transactions, role, onDeleteTransaction, onDeleteAllTransactions, onEditTransaction }) => {
   const [filterType, setFilterType] = useState('all');
   const [filterMonth, setFilterMonth] = useState(() => {
     const today = new Date();
@@ -727,6 +878,9 @@ const Dashboard = ({ transactions, role, onDeleteTransaction, onDeleteAllTransac
     let absoluteKeamananIn = 0, absoluteKeamananOut = 0;
 
     transactions.forEach(t => {
+      // Abaikan data yang tanggalnya invalid agar grafik tidak rusak
+      if(isNaN(new Date(t.date).getTime())) return; 
+
       if (t.type === 'in') {
         absoluteTotalIn += t.amount;
         if (t.category === 'tukin') absoluteTukinIn += t.amount;
@@ -740,6 +894,7 @@ const Dashboard = ({ transactions, role, onDeleteTransaction, onDeleteAllTransac
 
     let periodIn = 0, periodOut = 0;
     filteredTransactions.forEach(t => {
+      if(isNaN(new Date(t.date).getTime())) return; 
       if (t.type === 'in') periodIn += t.amount;
       else periodOut += t.amount;
     });
@@ -757,6 +912,8 @@ const Dashboard = ({ transactions, role, onDeleteTransaction, onDeleteAllTransac
     const grouped = {};
     filteredTransactions.forEach(t => {
       const dateStr = t.date;
+      if(isNaN(new Date(dateStr).getTime())) return; // Abaikan invalid date di grafik
+      
       if (!grouped[dateStr]) grouped[dateStr] = { date: dateStr, label: formatDate(dateStr), Pemasukan: 0, Pengeluaran: 0 };
       if (t.type === 'in') grouped[dateStr].Pemasukan += t.amount;
       if (t.type === 'out') grouped[dateStr].Pengeluaran += t.amount;
@@ -877,7 +1034,7 @@ const Dashboard = ({ transactions, role, onDeleteTransaction, onDeleteAllTransac
             </div>
           ) : (
             <div className="h-72 flex items-center justify-center text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-              Tidak ada data transaksi untuk rentang waktu ini
+              Tidak ada data transaksi (Valid) untuk rentang waktu ini
             </div>
           )}
         </div>
@@ -928,8 +1085,15 @@ const Dashboard = ({ transactions, role, onDeleteTransaction, onDeleteAllTransac
             </div>
             <div className="pl-4">
               <TransactionList 
-                transactions={filteredTransactions.sort((a, b) => new Date(b.date) - new Date(a.date))} 
+                transactions={filteredTransactions.sort((a,b) => {
+                  const dA = new Date(a.date).getTime();
+                  const dB = new Date(b.date).getTime();
+                  if (isNaN(dA) && !isNaN(dB)) return -1;
+                  if (!isNaN(dA) && isNaN(dB)) return 1;
+                  return dB - dA;
+                })} 
                 onDelete={onDeleteTransaction} 
+                onEdit={onEditTransaction}
               />
             </div>
         </div>
@@ -1022,12 +1186,16 @@ export default function App() {
     }
   };
 
-  // FITUR BARU: Hapus Semua Database Sekaligus
+  // TAMBAHAN: Fungsi Edit Transaksi
+  const handleEditTransaction = (updatedTx) => {
+    setTransactions(prev => prev.map(t => t.id === updatedTx.id ? updatedTx : t));
+  };
+
   const handleDeleteAllTransactions = () => {
     const konfirmasi = window.confirm("AWAS! Anda yakin ingin menghapus SEMUA database transaksi secara permanen? (Data tidak bisa dikembalikan)");
     if (konfirmasi) {
-      setTransactions([]); // Kosongkan state
-      localStorage.removeItem('bendahara_transactions'); // Hapus dari memori lokal
+      setTransactions([]); 
+      localStorage.removeItem('bendahara_transactions'); 
       alert("Seluruh data transaksi berhasil dikosongkan!");
     }
   };
@@ -1048,6 +1216,7 @@ export default function App() {
             role={currentUser?.role} 
             onDeleteTransaction={handleDeleteTransaction}
             onDeleteAllTransactions={handleDeleteAllTransactions}
+            onEditTransaction={handleEditTransaction} // Teruskan prop
           />
         );
       case 'tukin':
@@ -1060,6 +1229,7 @@ export default function App() {
             onBulkAddTransactions={handleBulkAddTransactions}
             onDeleteTransaction={handleDeleteTransaction}
             onDeleteAllTransactions={handleDeleteAllTransactions}
+            onEditTransaction={handleEditTransaction} // Teruskan prop
           />
         );
       case 'keamanan':
@@ -1072,6 +1242,7 @@ export default function App() {
             onBulkAddTransactions={handleBulkAddTransactions}
             onDeleteTransaction={handleDeleteTransaction}
             onDeleteAllTransactions={handleDeleteAllTransactions}
+            onEditTransaction={handleEditTransaction} // Teruskan prop
           />
         );
       case 'pengaturan':
@@ -1082,7 +1253,7 @@ export default function App() {
           </div>
         );
       default:
-        return <Dashboard transactions={getDashboardTransactions()} role={currentUser?.role} onDeleteTransaction={handleDeleteTransaction} onDeleteAllTransactions={handleDeleteAllTransactions} />;
+        return <Dashboard transactions={getDashboardTransactions()} role={currentUser?.role} onDeleteTransaction={handleDeleteTransaction} onDeleteAllTransactions={handleDeleteAllTransactions} onEditTransaction={handleEditTransaction} />;
     }
   };
 
