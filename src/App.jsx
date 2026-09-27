@@ -149,20 +149,57 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
   const [description, setDescription] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [satuan, setSatuan] = useState('');
-  const [qty, setQty] = useState(1);
+  // Ubah state awal Qty dan hargaSatuan menjadi string kosong agar kotak terlihat kosong
+  const [qty, setQty] = useState('');
   const [hargaSatuan, setHargaSatuan] = useState('');
   const [amount, setAmount] = useState(''); 
 
-  const handleQtyChange = (e) => { const val = e.target.value; setQty(val); setAmount((parseFloat(val) || 0) * (parseFloat(hargaSatuan) || 0) || ''); };
-  const handleHargaChange = (e) => { const val = e.target.value; setHargaSatuan(val); setAmount((parseFloat(qty) || 0) * (parseFloat(val) || 0) || ''); };
+  const handleQtyChange = (e) => { 
+    const val = e.target.value; 
+    setQty(val); 
+    // Jika qty atau hargaSatuan dihapus, total tidak perlu di-set ke nol secara otomatis jika user sedang mengetik total manual
+    if (val !== '' && hargaSatuan !== '') {
+        setAmount((parseFloat(val) || 0) * (parseFloat(hargaSatuan) || 0)); 
+    }
+  };
+  
+  const handleHargaChange = (e) => { 
+    const val = e.target.value; 
+    setHargaSatuan(val); 
+    if (val !== '' && qty !== '') {
+        setAmount((parseFloat(qty || 1) || 0) * (parseFloat(val) || 0)); 
+    } else if (val !== '') {
+        // Jika Qty kosong, asumsikan Qty = 1
+        setAmount(parseFloat(val) || 0);
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     const finalAmount = parseFloat(amount) || 0;
     if (!finalAmount || !description || !date) return;
     
-    onAddTransaction({ date, type, category, satuan: satuan || '-', qty: parseFloat(qty) || 1, hargaSatuan: parseFloat(hargaSatuan) || 0, amount: finalAmount, description });
-    setSatuan(''); setQty(1); setHargaSatuan(''); setAmount(''); setDescription('');
+    // Jika qty kosong, jadikan 1. Jika harga satuan kosong, jadikan sama dengan Total
+    const finalQty = parseFloat(qty) || 1;
+    const finalHargaSatuan = parseFloat(hargaSatuan) || (finalAmount / finalQty);
+
+    onAddTransaction({ 
+        date, 
+        type, 
+        category, 
+        satuan: satuan || '-', 
+        qty: finalQty, 
+        hargaSatuan: finalHargaSatuan, 
+        amount: finalAmount, 
+        description 
+    });
+    
+    // Reset form
+    setSatuan(''); 
+    setQty(''); 
+    setHargaSatuan(''); 
+    setAmount(''); 
+    setDescription('');
   };
 
   const downloadTemplate = () => {
@@ -226,7 +263,6 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
 
           if (!isNaN(totalAmount) && totalAmount > 0 && description) {
             importedTransactions.push({
-              // Hapus generate ID manual, karena database Supabase akan membuatnya otomatis
               date: dateStr, type, category, description, satuan, qty, hargaSatuan, amount: totalAmount
             });
           }
@@ -251,10 +287,20 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
           <div><label className="block text-sm font-medium text-gray-700 mb-1">Jenis Transaksi</label><select value={type} onChange={(e) => setType(e.target.value)} className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm"><option value="in">Pemasukan (+)</option><option value="out">Pengeluaran (-)</option></select></div>
           <div><label className="block text-sm font-medium text-gray-700 mb-1">Tanggal</label><input type="date" value={date} onChange={(e) => setDate(e.target.value)} required className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" /></div>
           <div className="md:col-span-2 lg:col-span-1"><label className="block text-sm font-medium text-gray-700 mb-1">Keterangan</label><input type="text" value={description} onChange={(e) => setDescription(e.target.value)} required placeholder="Contoh: Beli Token Listrik" className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" /></div>
+          
           <div><label className="block text-sm font-medium text-gray-700 mb-1">Satuan (Opsional)</label><input type="text" value={satuan} onChange={(e) => setSatuan(e.target.value)} placeholder="Misal: Pcs, Kg, Paket" className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" /></div>
-          <div><label className="block text-sm font-medium text-gray-700 mb-1">Qty</label><input type="number" value={qty} onChange={handleQtyChange} min="0.01" step="0.01" required className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" /></div>
-          <div><label className="block text-sm font-medium text-gray-700 mb-1">Harga / Satuan (Rp)</label><input type="number" value={hargaSatuan} onChange={handleHargaChange} required className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" /></div>
-          <div className="md:col-span-2 lg:col-span-3"><label className="block text-sm font-medium text-gray-700 mb-1">Total (Rp)</label><input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} required className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-emerald-700 bg-emerald-50" /></div>
+          
+          {/* Hapus required dari Qty */}
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">Qty (Opsional)</label><input type="number" value={qty} onChange={handleQtyChange} min="0.01" step="0.01" placeholder="Kosong = 1" className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" /></div>
+          
+          {/* Hapus required dari Harga / Satuan */}
+          <div><label className="block text-sm font-medium text-gray-700 mb-1">Harga / Satuan (Opsional)</label><input type="number" value={hargaSatuan} onChange={handleHargaChange} placeholder="Nominal per satuan" className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" /></div>
+          
+          <div className="md:col-span-2 lg:col-span-3">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Total (Rp)</label>
+            {/* Total tetap required karena ini data utama */}
+            <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} required placeholder="Masukkan total transaksi..." className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-emerald-700 bg-emerald-50" />
+          </div>
         </div>
         <div className="mt-6 flex justify-end"><button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2 rounded-lg font-medium transition-colors shadow-sm">Simpan Transaksi</button></div>
       </form>
