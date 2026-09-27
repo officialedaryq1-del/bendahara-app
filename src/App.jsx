@@ -273,11 +273,12 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
     setDescription('');
   };
 
+  // PERBARUAN: Template CSV Baru dengan kolom Total
   const downloadTemplate = () => {
-    const headers = "Tanggal;Jenis (in/out);Keterangan;Satuan;Qty;HargaSatuan;Saldo\n";
+    const headers = "Tanggal;Jenis (in/out);Keterangan;Satuan;Qty;HargaSatuan;Total\n";
     const example1 = "2026-09-25;in;Pemasukan Contoh Tukin;Bulan;1;500000;500000\n";
-    const example2 = "2026-09-26;out;Pengeluaran Contoh Tukin;Pcs;2;50000;400000\n";
-    const note = ";;;;;;PENTING: Jenis harus diisi 'in' (Pemasukan) atau 'out' (Pengeluaran). Format Tanggal YYYY-MM-DD.\n";
+    const example2 = "2026-09-26;out;Beli Material Bangunan (1 Paket);Paket;1;;1500000\n";
+    const note = ";;;;;;PENTING: Kolom HargaSatuan BISA DIKOSONGKAN jika Anda sudah mengisi Total (dan sebaliknya). Jenis harus 'in' atau 'out'.\n";
     
     const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
     const blob = new Blob([bom, headers + example1 + example2 + note], { type: 'text/csv;charset=utf-8;' });
@@ -310,32 +311,47 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
         const dateIdx = headers.findIndex(h => h.includes('tanggal'));
         const typeIdx = headers.findIndex(h => h.includes('jenis'));
         const descIdx = headers.findIndex(h => h.includes('keterangan'));
-        const amountIdx = headers.findIndex(h => h.includes('harga') || h.includes('nominal') || h.includes('saldo'));
-        
         const satIdx = headers.findIndex(h => h.includes('satuan'));
-        const qtyIdx = headers.findIndex(h => h.includes('qty'));
+        const qtyIdx = headers.findIndex(h => h === 'qty' || h.includes('kuantitas'));
+        const hargaIdx = headers.findIndex(h => h.includes('harga'));
+        // Mencari kolom total atau saldo
+        const totalIdx = headers.findIndex(h => h.includes('total') || h.includes('jumlah') || h.includes('saldo'));
 
-        if (dateIdx === -1 || typeIdx === -1 || descIdx === -1 || amountIdx === -1) {
-          alert("Gagal membaca template! Kolom yang terdeteksi: " + headers.join(', '));
+        if (dateIdx === -1 || typeIdx === -1 || descIdx === -1 || (hargaIdx === -1 && totalIdx === -1)) {
+          alert("Gagal membaca template! Pastikan ada kolom Tanggal, Jenis, Keterangan, dan HargaSatuan atau Total.");
           return;
         }
 
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(delimiter).map(v => v.trim());
+          if (values.length < 3) continue; // Lewati baris kosong atau catatan bawah
           
-          let rawAmount = (values[amountIdx] || '').replace(/[^0-9]/g, '');
-          let amount = parseInt(rawAmount, 10);
-          
+          let dateStr = values[dateIdx] || '';
           let typeStr = (values[typeIdx] || '').replace(/['"]/g, '').toLowerCase();
           let type = typeStr.includes('in') ? 'in' : 'out'; 
-          
           let description = (values[descIdx] || '').replace(/['"]/g, '');
-          let dateStr = values[dateIdx] || '';
           
           let satuan = satIdx !== -1 ? (values[satIdx] || '-') : '-';
-          let qty = qtyIdx !== -1 ? (parseInt(values[qtyIdx]) || 1) : 1;
+          let qty = qtyIdx !== -1 ? (parseFloat(values[qtyIdx]) || 1) : 1;
 
-          if (!isNaN(amount) && amount > 0) {
+          let rawHarga = hargaIdx !== -1 ? (values[hargaIdx] || '').replace(/[^0-9]/g, '') : '';
+          let rawTotal = totalIdx !== -1 ? (values[totalIdx] || '').replace(/[^0-9]/g, '') : '';
+          
+          let hargaSatuan = parseInt(rawHarga, 10);
+          let totalAmount = parseInt(rawTotal, 10);
+
+          // LOGIKA CERDAS HITUNG TOTAL / HARGA SATUAN
+          if (!isNaN(totalAmount) && totalAmount > 0) {
+            // Jika Total diisi tapi harga satuan kosong
+            if (isNaN(hargaSatuan) || hargaSatuan === 0) {
+              hargaSatuan = totalAmount / qty;
+            }
+          } else if (!isNaN(hargaSatuan) && hargaSatuan > 0) {
+            // Jika harga satuan diisi tapi total kosong
+            totalAmount = hargaSatuan * qty;
+          }
+
+          if (!isNaN(totalAmount) && totalAmount > 0 && description) {
             importedTransactions.push({
               id: Date.now() + i, 
               date: dateStr,
@@ -344,8 +360,8 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
               description: description,
               satuan: satuan,
               qty: qty,
-              hargaSatuan: amount / qty, 
-              amount: amount
+              hargaSatuan: hargaSatuan, 
+              amount: totalAmount
             });
           }
         }
@@ -391,7 +407,7 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Satuan (Opsional)</label>
-            <input type="text" value={satuan} onChange={(e) => setSatuan(e.target.value)} placeholder="Misal: Pcs, Kg, Bulan" className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
+            <input type="text" value={satuan} onChange={(e) => setSatuan(e.target.value)} placeholder="Misal: Pcs, Kg, Paket" className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Qty</label>
@@ -430,7 +446,7 @@ const TransactionForm = ({ onAddTransaction, onBulkAddTransactions, category }) 
             className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium border border-blue-200"
           >
             <Download className="w-4 h-4" />
-            Unduh Template CSV
+            Unduh Template CSV Baru
           </button>
           
           <div className="relative">
